@@ -18,7 +18,7 @@ from MCTS_generation import generation
 import math
 
 parser = argparse.ArgumentParser(description='UCT based on the language model')
-parser.add_argument('--save_dir', type=str, default='./data/save',
+parser.add_argument('--save_dir', type=str, default='../data/save',
                     help="directory of generative model")
 parser.add_argument('--mapping', type=str, default='',
                     help="directory of the generative and discriminative mapping")

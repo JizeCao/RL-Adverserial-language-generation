@@ -10,7 +10,7 @@ from model import hierEncoder_frequency
 import argparse
 
 parser = argparse.ArgumentParser(description='UCT based on the language model')
-parser.add_argument('--save_dir', type=str, default='./data/save',
+parser.add_argument('--save_dir', type=str, default='../data/save',
                     help='directory of the save place')
 
 

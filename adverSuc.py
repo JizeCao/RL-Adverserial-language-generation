@@ -60,7 +60,7 @@ PAD_token = 25002  # Used for padding short sentences
 SOS_token = 0  # Start-of-sentence token
 EOS_token = 25001  # End-of-sentence token
 
-data_dir = './data/save/'
+data_dir = '../data/save/'
 vocab = pickle.load(open(data_dir + 'whole_data_voc.p', 'rb'))
 pos_train = pickle.load(open(data_dir + 'small_train_2000000.p', 'rb'))[:20000]
 pos_valid = pickle.load(open(data_dir + 'small_valid_2000000.p', 'rb'))[:2000]

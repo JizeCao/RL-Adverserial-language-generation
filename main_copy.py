@@ -30,7 +30,7 @@ corpus = os.path.join('data', corpus_name)
 MAX_LENGTH = 12
 
 # Load/Assemble voc and pairs
-save_dir = os.path.join("data", "save")
+save_dir = os.path.join("../data", "save")
 voc_dir = os.path.join(save_dir, 'processed_voc.p')
 #voc_dir = os.path.join(save_dir, 'voc.p')
 train_data_dir = os.path.join(save_dir, 'processed_train_sen_2000000.p')

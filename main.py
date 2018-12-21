@@ -91,7 +91,7 @@ class Voc:
 
 
 # Load/Assemble voc and pairs
-save_dir = os.path.join("data", "save")
+save_dir = os.path.join("../data", "save")
 voc_dir = os.path.join(save_dir, 'whole_data_voc.p')
 #voc_dir = os.path.join(save_dir, 'voc.p')
 train_data_dir = os.path.join(save_dir, 'small_train_2000000.p')
