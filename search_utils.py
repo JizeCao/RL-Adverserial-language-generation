@@ -153,7 +153,7 @@ def logging(s, log_name, print_=True, log_=True):
     if print_:
         print(s)
     if log_:
-        with open(os.path.join('./data/save', log_name), 'a+') as f_log:
+        with open(os.path.join('../data/save', log_name), 'a+') as f_log:
             f_log.write(s + '\n')
 
 def create_exp_dir(path, scripts_to_save=None):

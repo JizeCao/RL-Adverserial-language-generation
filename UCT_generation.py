@@ -125,19 +125,19 @@ if __name__ == "__main__":
     dropout = 0.2
     attn_model = 'dot'
 
-    voc = pickle.load(open('./data/save/whole_data_voc.p', 'rb'))
+    voc = pickle.load(open('../data/save/whole_data_voc.p', 'rb'))
     if args.cuda:
-        checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'))
+        checkpoint = torch.load(open('../data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'))
     else:
-        checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'), map_location=lambda storage, loc: storage)
+        checkpoint = torch.load(open('../data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'), map_location=lambda storage, loc: storage)
     encoder_sd = checkpoint['en']
     decoder_sd = checkpoint['de']
     embedding_sd = checkpoint['embedding']
     encoder_optimizer_sd = checkpoint['en_opt']
     decoder_optimizer_sd = checkpoint['de_opt']
     voc.__dict__ = checkpoint['voc_dict']
-    pos_train_sen = pickle.load(open('./data/save/small_train_2000000.p', 'rb'))[:args.batch_size]
-    pos_valid_sen = pickle.load(open('./data/save/small_valid_2000000.p', 'rb'))[:args.val_batch_size]
+    pos_train_sen = pickle.load(open('../data/save/small_train_2000000.p', 'rb'))[:args.batch_size]
+    pos_valid_sen = pickle.load(open('../data/save/small_valid_2000000.p', 'rb'))[:args.val_batch_size]
 
 
     embedding = nn.Embedding(voc.num_words, hidden_size)

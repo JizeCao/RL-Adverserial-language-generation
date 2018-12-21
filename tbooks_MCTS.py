@@ -130,7 +130,7 @@ if __name__ == "__main__":
     encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
 
     if args.retrain:
-        rl_checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'))
+        rl_checkpoint = torch.load(open('../data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'))
         encoder.load_state_dict(rl_checkpoint['en'])
         decoder.load_state_dict(rl_checkpoint['de'])
         dis_model.load_state_dict(rl_checkpoint['dis'])

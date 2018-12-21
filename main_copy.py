@@ -644,7 +644,7 @@ searcher = GreedySearchDecoder(encoder, decoder)
 
 # Load the best model
 
-loadFilename = './data/save/cb_model/cornell movie-dialogs corpus/2-2_500/best_model_checkpoint.pt'
+loadFilename = '../data/save/cb_model/cornell movie-dialogs corpus/2-2_500/best_model_checkpoint.pt'
 
 # If loading on same machine the model was trained on
 checkpoint = torch.load(loadFilename, map_location=lambda storage, loc: storage)
