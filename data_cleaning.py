@@ -2,13 +2,13 @@ import pickle
 import copy
 from search_utils import Voc
 
-data_dir = './data/save/'
+data_dir = '../data/save/'
 
 
-#train = pickle.load(open(data_dir + 'small_train_2000000.p', 'rb'))
-#valid = pickle.load(open(data_dir + 'small_valid_2000000.p', 'rb'))
-train = pickle.load(open(data_dir + 'train_data.p', 'rb'))
-valid = pickle.load(open(data_dir + 'test_data.p', 'rb'))
+train = pickle.load(open(data_dir + 'small_train_2000000.p', 'rb'))
+valid = pickle.load(open(data_dir + 'small_valid_2000000.p', 'rb'))
+#train = pickle.load(open(data_dir + 'train_data.p', 'rb'))
+#valid = pickle.load(open(data_dir + 'test_data.p', 'rb'))
 dictionary = pickle.load(open(data_dir + 'whole_data_voc.p', 'rb'))
 
 def clean_voc(dic):
