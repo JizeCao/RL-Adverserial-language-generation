@@ -178,20 +178,25 @@ if __name__ == '__main__':
     #             exit()
 
     embedding_size = 500
+
+    Discriminator = hierEncoder_frequency(len(vocab.index2word), 500)
+    save_point_name = 'dist_freq.pt'
     if args.retrain:
         if args.cuda:
-            Discriminator = torch.load('dist_freq.pt')
+            cp = torch.load('dist_freq.pt')
         else:
-            Discriminator = torch.load('dist_freq.pt', map_location=lambda storage, loc: storage)
+            cp = torch.load('dist_freq.pt', map_location=lambda storage, loc: storage)
+        start_iteration = cp['iteration']
+        val_loss = cp['val_loss']
+        AdverSuc = cp['AdverSuc']
+        Discriminator.load_state_dict(cp['disc'])
+        save_point_name = 'dist_finetune_freq.pt'
     else:
-        Discriminator = hierEncoder_frequency(len(vocab.index2word), 500)
+        val_loss = 100000000
+        AdverSuc = 10000
 
+    n_iterations = 200000
     Discriminator.to(device)
-
-    n_iterations = 4000
-    val_loss = 100000000
-    AdverSuc = 10000
-
     for i in range(n_iterations):
         try:
             pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=256)
@@ -204,11 +209,11 @@ if __name__ == '__main__':
                     val_loss = current_val_loss
                     AdverSuc = curr_AdverSuc
                     torch.save({
-                        'iteration': i,
+                        'iteration': i + start_iteration,
                         'AdverSuc': AdverSuc,
                         'val_loss': val_loss,
                         'disc': Discriminator.state_dict()
-                    },  'dist_freq' + '.pt')
+                    },  save_point_name)
 
         except KeyboardInterrupt:
             logging('The final AdverSuc for the baseline is {:.2f}'.format(AdverSuc), log_name)
