@@ -178,7 +178,14 @@ if __name__ == '__main__':
     #             exit()
 
     embedding_size = 500
-    Discriminator = hierEncoder_frequency(len(vocab.index2word), 500)
+    if args.retrain:
+        if args.cuda:
+            Discriminator = torch.load('dist_freq.pt')
+        else:
+            Discriminator = torch.load('dist_freq.pt', map_location=lambda storage, loc: storage)
+    else:
+        Discriminator = hierEncoder_frequency(len(vocab.index2word), 500)
+
     Discriminator.to(device)
 
     n_iterations = 4000
