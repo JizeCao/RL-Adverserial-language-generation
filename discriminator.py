@@ -5,7 +5,7 @@ import random
 import torch.nn as nn
 from torch import optim
 import time
-from search_utils import tensorFromPair, trim_dummy_sen, load_model_dictionary_pairs, logging
+from search_utils import tensorFromPair, logging
 from model import hierEncoder_frequency
 import argparse
 
@@ -155,27 +155,29 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
                                                         log_name=log_name)
     return loss.item() / (len(pos_data) + len(neg_data)), missclassification / (len(pos_data) + len(neg_data))
 
+
+def load_data(args):
+    voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_train_sen_2000000.p'), 'rb'))
+    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_valid_sen_2000000.p'), 'rb'))
+    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
+    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
+
+    return voc, train_pos_pairs, valid_pos_pairs, neg_train_pairs, neg_valid_pairs
+
 if __name__ == '__main__':
+
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    PAD_token = 25002  # Used for padding short sentences
-    SOS_token = 0  # Start-of-sentence token
-    EOS_token = 25001  # End-of-sentence token
+
+    vocab, pos_train, pos_valid, neg_train, neg_valid = load_data(args)
+
+    PAD_token = vocab.word2index['<PAD>']  # Used for padding short sentences
+    SOS_token = vocab.word2index['<SOS>']  # Start-of-sentence token
+    EOS_token = vocab.word2index['<EOS>']  # End-of-sentence token
 
     log_name = 'discriminator_with_freq_decay' + '.txt'
 
-    vocab, pos_train, pos_valid, neg_train, neg_valid = load_model_dictionary_pairs(args, dis_model=False)
-
     counter = 0
-
-    # for Senset in [pos_train, pos_valid, neg_train, neg_valid]:
-    #     counter += 1
-    #     for pair in Senset:
-    #         try:
-    #             source = len(pair[0])
-    #             target = len(pair[1])
-    #         except IndexError:
-    #             print(counter)
-    #             exit()
 
     embedding_size = 500
 
