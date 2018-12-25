@@ -175,8 +175,8 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
     batch_size = 256
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    pos_data_batches = [batch2TrainData(vocab, pos_valid[i: i + batch_size]) for i in range(len(pos_valid) // batch_size)]
-    neg_data_batches = [batch2TrainData(vocab, neg_valid[i: i + batch_size]) for i in range(len(neg_valid) // batch_size)]
+    pos_data_batches = [batch2TrainData(vocab, pos_valid[i * batch_size: i * batch_size + batch_size]) for i in range(len(pos_valid) // batch_size)]
+    neg_data_batches = [batch2TrainData(vocab, neg_valid[i * batch_size: i * batch_size + batch_size]) for i in range(len(neg_valid) // batch_size)]
 
     posTags = torch.tensor([0] * batch_size).to(device)
     negTags = torch.tensor([1] * batch_size).to(device)
@@ -244,12 +244,12 @@ if __name__ == '__main__':
     args.gen_lr = 0
     args.dis_lr = 0.001
     args.cuda = True if torch.cuda.is_available() else False
-    args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     random.seed(args.seed)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = args.device
 
     vocab, pos_train, pos_valid, neg_train, neg_valid = load_data(args)
 

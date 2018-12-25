@@ -193,7 +193,7 @@ class hierEncoder_frequency(nn.Module):
 
 
     def forward(self, pair, to_device=True):
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # pair为对话 {x, y} 类型为torch.tensor()
         x_length = pair[0].size(0)
         y_length = pair[1].size(0)
