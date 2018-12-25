@@ -304,6 +304,8 @@ class hierEncoder_frequency_batchwise(nn.Module):
 
             return output
 
+        sources = sources.to(device)
+        targets = targets.to(device)
         # pair为对话 {x, y} 类型为torch.tensor()
         embedded_sources = self.embedding(sources)
         embedded_targets = self.embedding(targets)

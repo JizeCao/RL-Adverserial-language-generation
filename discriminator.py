@@ -201,7 +201,7 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
             predictions = torch.argmax(output, dim=1)
 
             for prediction in predictions:
-                if prediction == 0:
+                if prediction != 0:
                     missclassification += 1
             loss += criterion(output, posTags)
 
@@ -218,12 +218,12 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
             predictions = torch.argmax(output, dim=1)
 
             for prediction in predictions:
-                if prediction == 1:
+                if prediction != 1:
                     missclassification += 1
             loss += criterion(output, negTags)
 
     logging("Time consumed: {}, Batch loss: {:.2f}, AdverSuc {:.2f}".format((time.time()-start_time),
-                                                         loss.item() / (len(pos_valid) + len(neg_valid)),
+                                                         loss.item() / (len(pos_data_batches) + len(neg_data_batches)),
                                                         missclassification / (len(pos_valid) + len(neg_valid))),
                                                         log_name=log_name)
     return loss.item() / (len(pos_data_batches) + len(neg_data_batches)), missclassification / (len(pos_valid) + len(neg_valid))
@@ -278,13 +278,14 @@ if __name__ == '__main__':
     else:
         val_loss = 100000000
         AdverSuc = 10000
+        start_iteration = 0
 
     n_iterations = 2000000
     Discriminator.to(device)
     for i in range(n_iterations):
         try:
             pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=256)
-            if (i + 1) % 30 == 0:
+            if (i + 1) % 100 == 0:
                 print('Start validation check')
                 current_val_loss, curr_AdverSuc = evaluateD(Discriminator, pos_valid, neg_valid, EOS_token, vocab,
                                                             log_name)
