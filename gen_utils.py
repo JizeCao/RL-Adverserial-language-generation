@@ -2,9 +2,9 @@ import torch
 import itertools
 import random
 
-EOS_token = 2
-PAD_token = 0
-SOS_token = 1
+EOS_token = 1
+PAD_token = 24003
+SOS_token = 0
 
 
 def indexesFromSentence(voc, sentence):

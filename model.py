@@ -239,3 +239,104 @@ class hierEncoder_frequency(nn.Module):
         return torch.zeros(1, 1, self.embedding_size)
 
 
+class hierEncoder_frequency_batchwise(nn.Module):
+    def __init__(self, vocab_size, embedding_size):
+
+        super(hierEncoder_frequency_batchwise, self).__init__()
+        self.vocab_size = vocab_size
+        self.embedding_size = embedding_size
+        self.hidden_size = self.embedding_size  # the hidden size of GRU equals embedding size by default
+
+        self.embedding = nn.Embedding(self.vocab_size, self.embedding_size)
+        self.gru1 = nn.GRU(self.embedding_size, self.embedding_size)
+        self.gru2 = nn.GRU(self.embedding_size, 128)
+        self.linear1 = nn.Linear(128, 32)
+        self.linear2 = nn.Linear(33, 2)
+
+    def count_max_frequency(self, sen):
+        counts = torch.zeros(torch.max(sen).item() + 1)
+        for i in sen:
+            counts[i] += 1
+        return torch.max(counts).view(1)
+
+    def forward(self, pair=None, sources=None, targets=None, sources_length=None, targets_length=None, targets_order=None, to_device=True):
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        if pair is not None:
+            # pair为对话 {x, y} 类型为torch.tensor()
+            x_length = pair[0].size(0)
+            y_length = pair[1].size(0)
+
+            if to_device:
+                hidden = self.initHidden().to(device)
+            else:
+                hidden = self.initHidden()
+
+            for i in range(x_length):
+                embedded_x = self.embedding(pair[0][i]).view(1, 1, -1)
+                _, hidden = self.gru1(embedded_x, hidden)
+            hidden_x = hidden  # x句的编码结果
+
+            if to_device:
+                hidden = self.initHidden().to(device)
+            else:
+                hidden = self.initHidden()
+
+            for i in range(y_length):
+                embedded_y = self.embedding(pair[1][i]).view(1, 1, -1)
+                _, hidden = self.gru1(embedded_y, hidden)
+            hidden_y = hidden  # y句的编码结果
+
+            if to_device:
+                hidden = torch.zeros(1, 1, 128).to(device)
+            else:
+                hidden = torch.zeros(1, 1, 128)
+
+            _, hidden = self.gru2(hidden_x, hidden)
+            _, hidden = self.gru2(hidden_y, hidden)
+            hidden_xy = hidden  # 得到{x，y}编码结果
+
+            max_frequency = self.count_max_frequency(pair[1]).to(device)
+            output = F.relu(self.linear1(hidden_xy.squeeze()))
+            output = torch.cat((output, max_frequency), dim=0)
+            output = F.relu(self.linear2(output)).view(1, -1)
+            output = F.log_softmax(output, dim=1)  ## 注意此处的输出为 log_softmax
+
+            return output
+
+        # pair为对话 {x, y} 类型为torch.tensor()
+        embedded_sources = self.embedding(sources)
+        embedded_targets = self.embedding(targets)
+
+
+        packed_sources = torch.nn.utils.rnn.pack_padded_sequence(embedded_sources, sources_length)
+        packed_targets = torch.nn.utils.rnn.pack_padded_sequence(embedded_targets, targets_length)
+
+        # Source level GRU
+        _, hidden_sources = self.gru1(packed_sources)
+        _, hidden_targets = self.gru1(packed_targets)
+
+        # Change the hidden state to correct order
+        hidden_targets = hidden_targets[:, targets_order, :]
+        # Sentence level GRU, Check whether the dimension is correct!
+        _, hidden = self.gru2(hidden_sources, None)
+        _, hidden = self.gru2(hidden_targets, hidden)
+
+
+        max_frequency = torch.Tensor([self.count_max_frequency(targets[:, i]) for i in range(len(targets[0]))]).unsqueeze(dim=1).to(device)
+        output = F.relu(self.linear1(hidden.squeeze()))
+        output = torch.cat((output, max_frequency), dim=1)
+        output = F.relu(self.linear2(output))
+        output = F.log_softmax(output, dim=1)  ## 注意此处的输出为 log_softmax
+
+        return output
+
+
+if __name__ == '__main__':
+    sources = torch.round(torch.rand(4, 10)).long()
+    targets = torch.round(torch.rand(4, 10)).long()
+    length = torch.LongTensor([4] * 10)
+    dist = hierEncoder_frequency_batchwise(10, 100)
+    result = dist(sources=sources, targets=targets, sources_length=length, targets_length=length)
+    print()
+

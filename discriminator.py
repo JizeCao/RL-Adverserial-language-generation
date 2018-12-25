@@ -3,24 +3,72 @@ import pickle
 import torch
 import random
 import torch.nn as nn
+import numpy as np
 from torch import optim
 import time
 from search_utils import tensorFromPair, logging
-from model import hierEncoder_frequency
+from model import hierEncoder_frequency_batchwise
 import argparse
+import itertools
 
 parser = argparse.ArgumentParser(description='UCT based on the language model')
-parser.add_argument('--save_dir', type=str, default='./data/save',
+parser.add_argument('--save_dir', type=str, default='../data/save',
                     help='directory of the save place')
 parser.add_argument('--retrain', action='store_true', 
                     help='retrain from an existing checkpoint')
+parser.add_argument('--seed', type=int, default=1111,
+                    help='random seed')
+
+# Do zero padding given a list of either source or target sens
+# Return: a list contains #max_length of lists, each list contain #batch_size elements
+def zeroPadding(l, fillvalue):
+    return list(itertools.zip_longest(*l, fillvalue=fillvalue))
+
+# Returns padded input sequence tensor and lengths
+def inputVar(l, voc):
+    # indexes_batch = [indexesFromSentence(voc, sentence) for sentence in l]
+
+    #indexes_batch = [sen + [EOS_token] if sen[-1] != EOS_token else sen for sen in l]
+    indexes_batch = l
+    lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
+    padList = zeroPadding(indexes_batch, PAD_token)
+    padVar = torch.LongTensor(padList)
+    return padVar, lengths
+
+def indexing(pair_batch, voc):
+
+    new_batch = []
+    for pair in pair_batch:
+        temp = []
+        for sen in pair:
+            if sen[-1] != EOS_token:
+                sen.append(EOS_token)
+            temp.append(sen)
+        new_batch.append(temp)
+
+    return new_batch
+
+# Returns all items for a given batch of pairs
+def batch2TrainData(voc, pair_batch):
+    # pair_batch.sort(key=lambda x: len(x[0].split(" ")), reverse=True)
+    pair_batch = indexing(pair_batch, voc)
+    input_lengths = [len(pair[0]) for pair in pair_batch]
+    input_order = np.flip(np.argsort(np.asarray(input_lengths)))
+    pair_batch = [pair_batch[i] for i in input_order]
+    input_batch, output_batch = [], []
+    output_lengths = []
+    for pair in pair_batch:
+        input_batch.append(pair[0])
+        output_batch.append(pair[1])
+        output_lengths.append(len(pair[1]))
+    output_order = np.flip(np.argsort(np.asarray(output_lengths)))
+    output_batch_in_order = [output_batch[i] for i in output_order]
+    inp, lengths = inputVar(input_batch, voc)
+    output, output_lengths = inputVar(output_batch_in_order, voc)
+    return inp, lengths, output, output_lengths, output_order, input_order
 
 
-args = parser.parse_args()
-args.gen_lr = 0
-args.dis_lr = 0.001
-args.cuda = True if torch.cuda.is_available() else False
-args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 
 class Voc:
     def __init__(self, name):
@@ -72,88 +120,113 @@ class Voc:
 
 def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.001, batch_size=128, to_device=True):
 
-
     modelD.train()
     # prepare data
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    pos_data = [tensorFromPair(random.choice(TrainSet), EOS_Token=EOS_token, to_device=to_device) for _ in range(batch_size)]
-    neg_data = [tensorFromPair(random.choice(GenSet), EOS_Token=EOS_token, to_device=to_device) for _ in range(batch_size)]
+    # half positive, half negative
+    sub_batch_size = batch_size // 2
+    #pos_data = [tensorFromPair(random.choice(TrainSet), EOS_Token=EOS_token, to_device=to_device) for _ in range(batch_size)]
+    #neg_data = [tensorFromPair(random.choice(GenSet), EOS_Token=EOS_token, to_device=to_device) for _ in range(batch_size)]
+    pos_data = [random.choice(TrainSet) for _ in range(sub_batch_size)]
+    neg_data = [random.choice(GenSet) for _ in range(sub_batch_size)]
+    data = pos_data + neg_data
+    input_data, input_length, output_data, output_length, output_order, input_order = batch2TrainData(vocabulary, data)
+
+    #  Get the order that is used to retrive the original order
+    output_order = np.argsort(output_order)
+
     # define optimizer & criterion
     discOptimizer = optim.SGD(modelD.parameters(), lr=learning_rate, momentum=0.8)
     criterion = nn.NLLLoss()
     discOptimizer.zero_grad()
     # some predefined variable
     # 注意：规定 Discriminator 的输出概率的含义为 [positive_probability, negative_probability]
-    if to_device:
-        posTag = torch.tensor([0]).to(device)
-        negTag = torch.tensor([1]).to(device)
-    else:
-        posTag = torch.tensor([0])
-        negTag = torch.tensor([1])
 
-    loss = 0
+    labels = np.asarray([0] * sub_batch_size + [1] * sub_batch_size)
+
+
+    labels = labels[input_order]
+    labels = torch.from_numpy(labels).to(device)
+
+
     start_time = time.time()
     misclassification = 0
 
-    for iter in range(batch_size):
-        # choose positive or negative pair randomly
-        pick_positive_data = True if random.random() < 0.5 else False
+    output = modelD(sources=input_data, targets=output_data, sources_length=input_length, targets_length=output_length,
+                    targets_order=output_order, to_device=to_device)
+    outputTag = torch.argmax(output, dim=1)
+    for i in range(len(labels)):
+        if labels[i] != outputTag[i]:
+            misclassification += 1
 
-        if pick_positive_data:
-            output = modelD(pos_data[iter], to_device=to_device)
-            outputTag = torch.argmax(output)
-            if outputTag == posTag:
-                misclassification += 1
-            loss += criterion(output, posTag)
-        else:
-            output = modelD(neg_data[iter], to_device=to_device)
-            outputTag = torch.argmax(output)
-            if outputTag == negTag:
-                misclassification += 1
-            loss += criterion(output, negTag)
+    loss = criterion(output, labels)
+
 
     # BPTT & params updating
     loss.backward()
     discOptimizer.step()
 
     print("Time consumed: {} Batch loss: {:.2f}, Misclassification rate {:.2f} ".format((time.time()-start_time),
-                                                          loss.item(), 1 - misclassification / batch_size))
+                                                          loss.item(), misclassification / batch_size))
+
 
 def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
     # prepare data
+    batch_size = 256
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    to_device = True
-    pos_data = [tensorFromPair(pos_valid[i], EOS_Token=EOS_token, to_device=to_device) for i in range(10000)]
-    neg_data = [tensorFromPair(neg_valid[i], EOS_Token=EOS_token, to_device=to_device) for i in range(10000)]
 
-    posTag = torch.tensor([0]).to(device)
-    negTag = torch.tensor([1]).to(device)
-    loss = 0
+    pos_data_batches = [batch2TrainData(vocab, pos_valid[i: i + batch_size]) for i in range(len(pos_valid) // batch_size)]
+    neg_data_batches = [batch2TrainData(vocab, neg_valid[i: i + batch_size]) for i in range(len(neg_valid) // batch_size)]
+
+    posTags = torch.tensor([0] * batch_size).to(device)
+    negTags = torch.tensor([1] * batch_size).to(device)
+    loss = torch.Tensor([0]).to(device)
     start_time = time.time()
     criterion = nn.NLLLoss()
     missclassification = 0
 
+
     modelD.eval()
     with torch.no_grad():
-        for pos_pair in pos_data:
-            output = modelD(pos_pair, to_device=True)
-            outputTag = torch.argmax(torch.exp(output))
-            if outputTag != posTag.long():
-                missclassification += 1
-            loss += criterion(output, posTag)
+        for batch in pos_data_batches:
 
-        for neg_pair in neg_data:
-            output = modelD(neg_pair, to_device=True)
-            outputTag = torch.argmax(torch.exp(output))
-            if outputTag != negTag.long():
-                missclassification += 1
-            loss += criterion(output, negTag)
+            input_data, input_length, output_data, output_length, output_order, input_order = batch
+
+            #  Get the order that is used to retrive the original order
+            retrive_order = np.argsort(output_order)
+
+            output = modelD(sources=input_data, targets=output_data, sources_length=input_length,
+                            targets_length=output_length, targets_order=retrive_order)
+
+            predictions = torch.argmax(output, dim=1)
+
+            for prediction in predictions:
+                if prediction == 0:
+                    missclassification += 1
+            loss += criterion(output, posTags)
+
+        for batch in neg_data_batches:
+
+            input_data, input_length, output_data, output_length, output_order, input_order = batch
+
+            #  Get the order that is used to retrive the original order
+            retrive_order = np.argsort(output_order)
+
+            output = modelD(sources=input_data, targets=output_data, sources_length=input_length,
+                            targets_length=output_length, targets_order=retrive_order)
+
+            predictions = torch.argmax(output, dim=1)
+
+            for prediction in predictions:
+                if prediction == 1:
+                    missclassification += 1
+            loss += criterion(output, negTags)
 
     logging("Time consumed: {}, Batch loss: {:.2f}, AdverSuc {:.2f}".format((time.time()-start_time),
-                                                         loss.item() / (len(pos_data) + len(neg_data)),
-                                                        missclassification / (len(pos_data) + len(neg_data))),
+                                                         loss.item() / (len(pos_valid) + len(neg_valid)),
+                                                        missclassification / (len(pos_valid) + len(neg_valid))),
                                                         log_name=log_name)
-    return loss.item() / (len(pos_data) + len(neg_data)), missclassification / (len(pos_data) + len(neg_data))
+    return loss.item() / (len(pos_data_batches) + len(neg_data_batches)), missclassification / (len(pos_valid) + len(neg_valid))
 
 
 def load_data(args):
@@ -166,6 +239,15 @@ def load_data(args):
     return voc, train_pos_pairs, valid_pos_pairs, neg_train_pairs, neg_valid_pairs
 
 if __name__ == '__main__':
+
+    args = parser.parse_args()
+    args.gen_lr = 0
+    args.dis_lr = 0.001
+    args.cuda = True if torch.cuda.is_available() else False
+    args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -181,23 +263,23 @@ if __name__ == '__main__':
 
     embedding_size = 500
 
-    Discriminator = hierEncoder_frequency(len(vocab.index2word), 500)
-    save_point_name = 'dist_freq.pt'
+    Discriminator = hierEncoder_frequency_batchwise(len(vocab.index2word), 500)
+    save_point_name = 'dist_freq_batch.pt'
     if args.retrain:
         if args.cuda:
-            cp = torch.load('dist_freq.pt')
+            cp = torch.load('dist_freq_batch.pt')
         else:
-            cp = torch.load('dist_freq.pt', map_location=lambda storage, loc: storage)
+            cp = torch.load('dist_freq_batch.pt', map_location=lambda storage, loc: storage)
         start_iteration = cp['iteration']
         val_loss = cp['val_loss']
         AdverSuc = cp['AdverSuc']
         Discriminator.load_state_dict(cp['disc'])
-        save_point_name = 'dist_finetune_freq.pt'
+        save_point_name = 'dist_finetune_freq_batch.pt'
     else:
         val_loss = 100000000
         AdverSuc = 10000
 
-    n_iterations = 200000
+    n_iterations = 2000000
     Discriminator.to(device)
     for i in range(n_iterations):
         try:
