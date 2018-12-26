@@ -12,7 +12,7 @@ import argparse
 import itertools
 
 parser = argparse.ArgumentParser(description='UCT based on the language model')
-parser.add_argument('--save_dir', type=str, default='../data/save',
+parser.add_argument('--save_dir', type=str, default='./data/save',
                     help='directory of the save place')
 parser.add_argument('--retrain', action='store_true', 
                     help='retrain from an existing checkpoint')
@@ -172,7 +172,7 @@ def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.0
 
 def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
     # prepare data
-    batch_size = 256
+    batch_size = 512
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     pos_data_batches = [batch2TrainData(vocab, pos_valid[i * batch_size: i * batch_size + batch_size]) for i in range(len(pos_valid) // batch_size)]
@@ -184,6 +184,7 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
     start_time = time.time()
     criterion = nn.NLLLoss()
     missclassification = 0
+    num_sen = 0
 
 
     modelD.eval()
@@ -203,6 +204,7 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
             for prediction in predictions:
                 if prediction != 0:
                     missclassification += 1
+                num_sen += 1
             loss += criterion(output, posTags)
 
         for batch in neg_data_batches:
@@ -220,13 +222,14 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
             for prediction in predictions:
                 if prediction != 1:
                     missclassification += 1
+                num_sen += 1
             loss += criterion(output, negTags)
 
     logging("Time consumed: {}, Batch loss: {:.2f}, AdverSuc {:.2f}".format((time.time()-start_time),
                                                          loss.item() / (len(pos_data_batches) + len(neg_data_batches)),
-                                                        missclassification / (len(pos_valid) + len(neg_valid))),
+                                                        missclassification / num_sen),
                                                         log_name=log_name)
-    return loss.item() / (len(pos_data_batches) + len(neg_data_batches)), missclassification / (len(pos_valid) + len(neg_valid))
+    return loss.item() / (len(pos_data_batches) + len(neg_data_batches)), missclassification / num_sen
 
 
 def load_data(args):
@@ -245,11 +248,11 @@ if __name__ == '__main__':
     args.dis_lr = 0.001
     args.cuda = True if torch.cuda.is_available() else False
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    random.seed(args.seed)
+    #np.random.seed(args.seed)
+    #torch.manual_seed(args.seed)
+    #random.seed(args.seed)
 
-    device = args.device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     vocab, pos_train, pos_valid, neg_train, neg_valid = load_data(args)
 
@@ -284,10 +287,10 @@ if __name__ == '__main__':
     Discriminator.to(device)
     for i in range(n_iterations):
         try:
-            pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=256)
-            if (i + 1) % 100 == 0:
+            pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=128)
+            if (i + 1) % 500 == 0:
                 print('Start validation check')
-                current_val_loss, curr_AdverSuc = evaluateD(Discriminator, pos_valid, neg_valid, EOS_token, vocab,
+                current_val_loss, curr_AdverSuc = evaluateD(Discriminator, pos_valid[:20000], neg_valid[:20000], EOS_token, vocab,
                                                             log_name)
 
                 if curr_AdverSuc < AdverSuc:
