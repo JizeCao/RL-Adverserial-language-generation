@@ -1,13 +1,17 @@
-from model import hierEncoder_frequency_batchwise
-from discriminator import pretrainD, batch2TrainData
+import os
 import pickle
 import torch
 import random
 import torch.nn as nn
+import numpy as np
 from torch import optim
 import time
-from search_utils import tensorFromPair, logging, Voc
+from discriminator import pretrainD, batch2TrainData
+from search_utils import tensorFromPair, logging
+from model import hierEncoder_frequency_batchwise
 import argparse
+import itertools
+
 
 def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
     # prepare data
