@@ -25,7 +25,7 @@ def zeroPadding(l, fillvalue):
     return list(itertools.zip_longest(*l, fillvalue=fillvalue))
 
 # Returns padded input sequence tensor and lengths
-def inputVar(l, voc):
+def inputVar(l, EOS_token, PAD_token):
     # indexes_batch = [indexesFromSentence(voc, sentence) for sentence in l]
 
     #indexes_batch = [sen + [EOS_token] if sen[-1] != EOS_token else sen for sen in l]
@@ -35,7 +35,7 @@ def inputVar(l, voc):
     padVar = torch.LongTensor(padList)
     return padVar, lengths
 
-def indexing(pair_batch, voc):
+def indexing(pair_batch, EOS_token):
 
     new_batch = []
     for pair in pair_batch:
@@ -49,9 +49,11 @@ def indexing(pair_batch, voc):
     return new_batch
 
 # Returns all items for a given batch of pairs
-def batch2TrainData(voc, pair_batch):
+def batch2TrainData(vocab, pair_batch):
     # pair_batch.sort(key=lambda x: len(x[0].split(" ")), reverse=True)
-    pair_batch = indexing(pair_batch, voc)
+    EOS_token = vocab.word2index['<EOS>']
+    PAD_token = vocab.word2index['<PAD>']
+    pair_batch = indexing(pair_batch, EOS_token)
     input_lengths = [len(pair[0]) for pair in pair_batch]
     input_order = np.flip(np.argsort(np.asarray(input_lengths)))
     pair_batch = [pair_batch[i] for i in input_order]
@@ -63,8 +65,8 @@ def batch2TrainData(voc, pair_batch):
         output_lengths.append(len(pair[1]))
     output_order = np.flip(np.argsort(np.asarray(output_lengths)))
     output_batch_in_order = [output_batch[i] for i in output_order]
-    inp, lengths = inputVar(input_batch, voc)
-    output, output_lengths = inputVar(output_batch_in_order, voc)
+    inp, lengths = inputVar(input_batch, EOS_token, PAD_token)
+    output, output_lengths = inputVar(output_batch_in_order, EOS_token, PAD_token)
     return inp, lengths, output, output_lengths, output_order, input_order
 
 
