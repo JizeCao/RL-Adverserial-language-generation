@@ -9,7 +9,7 @@ import time
 import gc
 import copy
 import os
-from search_utils import create_exp_dir, dis_retrain, Voc, trim_dummy_sen, load_model_dictionary_pairs, dis_evaluate_sen, logging
+from search_utils import create_exp_dir, dis_retrain, Voc, trim_dummy_sen, load_model_dictionary_pairs, dis_evaluate_sen, logging, evaluateD
 from gen_utils import gen_iter_train
 from collections import Counter
 from model import EncoderRNN, LuongAttnDecoderRNN, hierEncoder
@@ -18,7 +18,7 @@ import math
 
 
 parser = argparse.ArgumentParser(description='UCT based on the language model')
-parser.add_argument('--save_dir', type=str, default='../data/save',
+parser.add_argument('--save_dir', type=str, default='./data/save',
                     help="directory of generative model")
 parser.add_argument('--mapping', type=str, default='',
                     help="directory of the generative and discriminative mapping")
@@ -128,9 +128,10 @@ def generate_randint_list(args, sentence_list_len):
 if __name__ == "__main__":
 
     encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
+    args.EOS_id = voc.word2index['<EOS>']
 
     if args.retrain:
-        rl_checkpoint = torch.load(open('../data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'))
+        rl_checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_freq_decay_Reinforce_checkpoint_with_dis_val_loss.pt', 'rb'))
         encoder.load_state_dict(rl_checkpoint['en'])
         decoder.load_state_dict(rl_checkpoint['de'])
         dis_model.load_state_dict(rl_checkpoint['dis'])
@@ -138,11 +139,14 @@ if __name__ == "__main__":
             encoder.cuda()
             decoder.cuda()
             dis_model.cuda()
+        dis_val_loss = rl_checkpoint['dis_val_loss']
+    else:
+        dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_sen, neg_valid=neg_valid_sen, EOS_token=args.EOS_id)
 
     
 
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_id)
+    #os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_id)
     dis_reward = 0
     num_dis = 0
     dis_reward_sample = 0
@@ -165,7 +169,6 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     # The discriminator's loss, lr
-    dis_val_loss = 1000000000000
     dis_lr = args.dis_lr
 
     # Start iterating
@@ -287,5 +290,6 @@ if __name__ == "__main__":
                 'voc_dict': voc.__dict__,
                 'dis_val_loss': dis_val_loss,
                 'embedding': embedding.state_dict(),
-                'num_loop': num_loop
+                'num_loop': num_loop,
+                'dis_lr': dis_lr
             }, os.path.join(args.save_dir, '{}_{}.pt'.format(num_loop + 1, 'freq_decay_Reinforce_checkpoint_with_dis_val_loss')))

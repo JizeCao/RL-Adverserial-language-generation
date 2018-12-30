@@ -153,7 +153,7 @@ def logging(s, log_name, print_=True, log_=True):
     if print_:
         print(s)
     if log_:
-        with open(os.path.join('../data/save', log_name), 'a+') as f_log:
+        with open(os.path.join('./data/save', log_name), 'a+') as f_log:
             f_log.write(s + '\n')
 
 def create_exp_dir(path, scripts_to_save=None):
@@ -249,7 +249,7 @@ def tensorFromPairEval(pair, EOS_Token, to_device=True):
 def evaluate_word(decoder, encoder_outputs, input, decoder_hidden, args):
     # Unsqueeze input to satisfy dimension
     if args.cuda:
-        decoder_output, decoder_hidden = decoder(input.unsqueeze(0).cuda(), decoder_hidden, encoder_outputs)
+        decoder_output, decoder_hidden = decoder(input.unsqueeze(0).to(args.device), decoder_hidden, encoder_outputs)
     else:
         decoder_output, decoder_hidden = decoder(input.unsqueeze(0), decoder_hidden, encoder_outputs)
 
