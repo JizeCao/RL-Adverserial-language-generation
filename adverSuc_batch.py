@@ -7,11 +7,10 @@ import numpy as np
 from torch import optim
 import time
 from discriminator import pretrainD, batch2TrainData
-from search_utils import tensorFromPair, logging
+from search_utils import tensorFromPair, logging, Voc
 from model import hierEncoder_frequency_batchwise
 import argparse
 import itertools
-
 
 def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
     # prepare data
@@ -75,12 +74,17 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
     return loss.item() / (len(pos_data_batches) + len(neg_data_batches)), missclassification / num_sen
 
 def load_data(args):
-    voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
-    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_train_sen_2000000.p'), 'rb'))
-    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_valid_sen_2000000.p'), 'rb'))
-    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
-    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
+    #voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
+    #train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_train_sen_2000000.p'), 'rb'))
+    #valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_valid_sen_2000000.p'), 'rb'))
+    #neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
+    #neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
 
+    voc = pickle.load(open(os.path.join(args.save_dir, 'whole_data_voc.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
+    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_' + str(args.RL_index)), 'rb'))
+    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_valid_'+ str(args.RL_index)), 'rb'))
     return voc, train_pos_pairs, valid_pos_pairs, neg_train_pairs, neg_valid_pairs
 
 if __name__ == '__main__':
@@ -140,7 +144,7 @@ if __name__ == '__main__':
             pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=128)
             if (i + 1) % 500 == 0:
                 print('Start validation check')
-                current_val_loss, curr_AdverSuc = evaluateD(Discriminator, pos_valid[:20000], neg_valid[:20000], EOS_token, vocab,
+                current_val_loss, curr_AdverSuc = evaluateD(Discriminator, pos_valid[:len(neg_valid)], neg_valid, EOS_token, vocab,
                                                             log_name)
 
                 if curr_AdverSuc < AdverSuc:

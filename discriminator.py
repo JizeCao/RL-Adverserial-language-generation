@@ -42,8 +42,13 @@ def indexing(pair_batch, EOS_token):
         temp = []
         for sen in pair:
             if sen[-1] != EOS_token:
-                sen.append(EOS_token)
+                if type(sen) is list:
+                    sen.append(EOS_token)
+                else:
+                    sen = torch.cat((sen, torch.LongTensor([EOS_token])), 0) 
+        
             temp.append(sen)
+        
         new_batch.append(temp)
 
     return new_batch
