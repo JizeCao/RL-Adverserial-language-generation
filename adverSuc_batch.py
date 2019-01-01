@@ -85,7 +85,7 @@ def load_data(args):
     valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
     neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_' + str(args.RL_index)), 'rb'))
     neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_valid_'+ str(args.RL_index)), 'rb'))
-    return voc, train_pos_pairs, valid_pos_pairs, neg_train_pairs, neg_valid_pairs
+    return voc, train_pos_pairs[:len(neg_train_pairs)], valid_pos_pairs[:len(neg_valid_pairs)], neg_train_pairs, neg_valid_pairs
 
 if __name__ == '__main__':
 
@@ -109,6 +109,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     vocab, pos_train, pos_valid, neg_train, neg_valid = load_data(args)
+
 
     PAD_token = vocab.word2index['<PAD>']  # Used for padding short sentences
     SOS_token = vocab.word2index['<SOS>']  # Start-of-sentence token
