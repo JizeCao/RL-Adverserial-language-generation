@@ -84,9 +84,9 @@ parser.add_argument('--RL_index', type=int, default=0, help="RL index")
 # Discriminator retraining parameters:
 parser.add_argument('--pos_data', type=str, default="try_model/",
                     help='positive data')
-parser.add_argument('--gen_lr', type=float, default=0.0001,
+parser.add_argument('--gen_lr', type=float, default=0.001,
                     help='initial learning rate')
-parser.add_argument('--dis_lr', type=float, default=0.0001,
+parser.add_argument('--dis_lr', type=float, default=0.001,
                     help='initial learning rate')
 parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
@@ -102,6 +102,8 @@ parser.add_argument('--nonmono', type=int, default=5,
                     help='random seed')
 parser.add_argument('--save', type=str, default='test_dis',
                     help='path to save the final model')
+parser.add_argument('--embedding', action='store_true',
+                    help='use embedding to generate sentences')
 parser.add_argument('--wdecay', type=float, default=1.2e-6,
                     help='weight decay applied to all weights')
 
@@ -140,9 +142,14 @@ if __name__ == "__main__":
             decoder.cuda()
             dis_model.cuda()
         dis_val_loss = rl_checkpoint['dis_val_loss']
+    if args.embedding:
+        embedded_dis = torch.load(open('AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt', 'rb'))
     else:
-        dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_sen, neg_valid=neg_valid_sen, EOS_token=args.EOS_id)
-
+        embedded_dis = None
+    
+    else:
+        dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_sen[:20000], neg_valid=neg_valid_sen[:20000], EOS_token=args.EOS_id)
+        logging('initial dis_val loss is {:.2f}'.format(dis_val_loss), 'new_dis_val_loss.txt') 
     
 
 
@@ -189,7 +196,7 @@ if __name__ == "__main__":
             args.words = args.threshold
         print("Start generating sentences")
         # TODO: Use the num_iter_list for generator's training
-        gen_sen_list, dis_reward, num_dis, num_iter_list = generation(encoder, decoder, dis_model, num_loop, args, pos_train_sen, start_index, dis_reward, num_dis, ix_to_word, dis_reward_list)
+        gen_sen_list, dis_reward, num_dis, num_iter_list = generation(encoder, decoder, dis_model, num_loop, args, pos_train_sen, start_index, dis_reward, num_dis, ix_to_word, dis_reward_list, embedding=args.embedding, embedded_dis=embedded_dis)
         if num_loop % 40 == 1:
             with open('sample.txt', 'a') as outf:
                 outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
@@ -250,6 +257,7 @@ if __name__ == "__main__":
             if valid and i == 0:
                 train_loss, dis_lr, dis_val_loss, curr_val_loss = dis_retrain(dis_model, args=args, train_data=data, labels=labels,
                      ix_to_word=ix_to_word, validation=valid, pos_valid_pairs=pos_valid_sen[:20000], neg_valid_pairs=neg_valid_sen[:20000], current_val_loss=dis_val_loss)
+
                 logging('current dis_val loss is {:.2f} at iteration {}'.format(curr_val_loss, num_loop), 'new_dis_val_loss.txt') 
             else:
                 dis_retrain(dis_model, args=args, train_data=data, labels=labels,

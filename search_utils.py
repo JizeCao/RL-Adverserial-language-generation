@@ -297,45 +297,6 @@ def dis_evaluate_sen(data_source, model, args):
     return prob
 
 
-def dis_retrain(dis_model, args, train_data, labels, ix_to_word=None, dis_lr=0.001, validation=False,
-                pos_valid_pairs=None, neg_valid_pairs=None, current_val_loss=1000000000):
-    if validation:
-        loss = evaluateD(dis_model, pos_valid=pos_valid_pairs, neg_valid=neg_valid_pairs, EOS_token=25001)
-        if loss >= current_val_loss:
-            dis_lr /= 2
-            current_val_loss = loss
-
-    dis_model.train()
-
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    dis_optimizer = optim.SGD(dis_model.parameters(), lr=dis_lr)
-    criterion = nn.NLLLoss()
-    dis_optimizer.zero_grad()    
-    labels = torch.LongTensor(labels).to(device)
-    Accuracy = 0
-    loss = 0
-    total_pos_prob = 0
-    for i in range(len(labels)):
-        train_data[i] = tensorFromPairEval(train_data[i], 25001)
-        output = dis_model(train_data[i], to_device=True)
-        pos_prob = torch.exp(output)[0][0].item()
-        total_pos_prob += pos_prob
-        outputTag = torch.argmax(torch.exp(output))
-        if outputTag == labels[i].long():
-            Accuracy += 1
-        current_loss = criterion(output, labels[i])
-        loss += current_loss
-    loss.backward()
-    
-
-    dis_optimizer.step()
-    print('Accuracy: ', Accuracy / len(labels), 'loss: ', loss)
-    print('Average pos prob: ', total_pos_prob / len(labels))
-    # current_val_loss is the largest validation loss, loss is 
-    # the actual 'current' one !!!
-    return loss, dis_lr, current_val_loss, loss
-
-
 # Temporary solution
 def evaluateD(modelD, pos_valid, neg_valid, EOS_token):
     # prepare data
@@ -361,3 +322,46 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token):
     print("Time consumed: {} Batch loss: {:.2f} ".format((time.time()-start_time),
                                                          loss.item() / (len(pos_data) + len(neg_data))))
     return loss.item() / (len(pos_data) + len(neg_data))
+
+
+def dis_retrain(dis_model, args, train_data, labels, ix_to_word=None, dis_lr=0.001, validation=False,
+                pos_valid_pairs=None, neg_valid_pairs=None, current_val_loss=0):
+
+    EOS_token = args.EOS_id
+    if validation:
+        dis_model.eval()
+        dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_pairs[:20000], neg_valid=neg_valid_pairs[:20000], EOS_token=EOS_token)
+        if dis_val_loss >= current_val_loss:
+            dis_lr /= 2
+            current_val_loss = dis_val_loss
+
+    dis_model.train()
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    dis_optimizer = optim.SGD(dis_model.parameters(), lr=dis_lr)
+    criterion = nn.NLLLoss()
+    dis_optimizer.zero_grad()    
+    labels = torch.LongTensor(labels).to(device)
+    Accuracy = 0
+    loss = 0
+    total_pos_prob = 0
+    for i in range(len(labels)):
+        train_data[i] = tensorFromPairEval(train_data[i], EOS_token)
+        output = dis_model(train_data[i], to_device=True)
+        pos_prob = torch.exp(output)[0][0].item()
+        total_pos_prob += pos_prob
+        outputTag = torch.argmax(torch.exp(output))
+        if outputTag == labels[i].long():
+            Accuracy += 1
+        current_loss = criterion(output, labels[i])
+        loss += current_loss
+    loss.backward()
+    
+
+    dis_optimizer.step()
+    print('Accuracy: ', Accuracy / len(labels), 'loss: ', loss)
+    print('Average pos prob: ', total_pos_prob / len(labels))
+    # current_val_loss is the largest validation loss, loss is 
+    # the actual 'current' one !!!
+    return loss, dis_lr, current_val_loss, dis_val_loss
+
+
