@@ -14,7 +14,7 @@ parser.add_argument('--save_dir', type=str, default='./data/save',
                     help="directory of data")
 parser.add_argument('--num_warm_up', type=int, default=10000,
                     help="number of sentences to warm up UCT")
-parser.add_argument('--batch_size', type=int, default=1024,
+parser.add_argument('--batch_size', type=int, default=786,
                     help="batch size")
 
 
@@ -123,7 +123,10 @@ for iteration in range(1, n_iteration + 1):
         input_hidden = get_hidden(input_variable, lengths, encoder, args)
         input_hiddens = torch.cat((input_hiddens, input_hidden), dim=0)
 
-torch.save(input_hiddens, 'heuristic_sentences_hiddens')
+
+normalized_hiddens = input_hiddens / torch.sum(input_hiddens, dim=1).unsqueeze(dim=1)
+
+torch.save(normalized_hiddens, 'heuristic_normalized_sentences_hiddens')
 pickle.dump(picked_pairs, open('heuristic_sentences', 'wb'))
 
 
