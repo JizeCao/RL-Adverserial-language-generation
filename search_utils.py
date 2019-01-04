@@ -327,10 +327,13 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token):
 def dis_retrain(dis_model, args, train_data, labels, ix_to_word=None, dis_lr=0.001, validation=False,
                 pos_valid_pairs=None, neg_valid_pairs=None, current_val_loss=0):
 
+    dis_val_loss = 0
+
     EOS_token = args.EOS_id
     if validation:
         dis_model.eval()
         dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_pairs[:20000], neg_valid=neg_valid_pairs[:20000], EOS_token=EOS_token)
+        #print('The dis_val_loss for 20 iteration is', dis_val_loss)
         if dis_val_loss >= current_val_loss:
             dis_lr /= 2
             current_val_loss = dis_val_loss

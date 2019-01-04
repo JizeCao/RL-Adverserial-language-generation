@@ -56,9 +56,7 @@ parser.add_argument('--unit_test', action='store_true',
                     help="Do unit testing on test data")
 parser.add_argument('--absolute_save', type=str, default='test',
                     help='the absolute save path of the models')
-parser.add_argument('--unk_panalty', type=float, default=0.15,
-                    help='the panalty on unk')
-parser.add_argument('--reward_panalty', type=float, default=0.4,
+parser.add_argument('--reward_panalty', type=float, default=1,
                     help='the panalty on the generator reward')
 #parser.add_argument('--prev_dis_model', type=str, default='best_dis_model_copy_train/',
 #                    help='The dis_model used from retraining the generator')
@@ -104,10 +102,10 @@ parser.add_argument('--save', type=str, default='test_dis',
                     help='path to save the final model')
 parser.add_argument('--embedding', action='store_true',
                     help='use embedding to generate sentences')
-parser.add_argument('--wdecay', type=float, default=1.2e-6,
-                    help='weight decay applied to all weights')
-
-
+parser.add_argument('--frozen_dis', action='store_true',
+                    help='freeze the discriminator')
+parser.add_argument('--frozen_gen', action='store_true',
+                    help='freeze the generator')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -142,10 +140,10 @@ if __name__ == "__main__":
             decoder.cuda()
             dis_model.cuda()
         dis_val_loss = rl_checkpoint['dis_val_loss']
-    if args.embedding:
-        embedded_dis = torch.load(open('AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt', 'rb'))
-    else:
-        embedded_dis = None
+        if args.embedding:
+            embedded_dis = torch.load(open('AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt', 'rb'))
+        else:
+            embedded_dis = None
     
     else:
         dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_sen[:20000], neg_valid=neg_valid_sen[:20000], EOS_token=args.EOS_id)
@@ -196,7 +194,7 @@ if __name__ == "__main__":
             args.words = args.threshold
         print("Start generating sentences")
         # TODO: Use the num_iter_list for generator's training
-        gen_sen_list, dis_reward, num_dis, num_iter_list = generation(encoder, decoder, dis_model, num_loop, args, pos_train_sen, start_index, dis_reward, num_dis, ix_to_word, dis_reward_list, embedding=args.embedding, embedded_dis=embedded_dis)
+        gen_sen_list, dis_reward, num_dis, num_iter_list = generation(encoder, decoder, dis_model, num_loop, args, pos_train_sen, start_index, dis_reward, num_dis, ix_to_word, dis_reward_list)
         if num_loop % 40 == 1:
             with open('sample.txt', 'a') as outf:
                 outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
@@ -244,48 +242,64 @@ if __name__ == "__main__":
             #num_iter_list = torch.cat((torch.zeros(len(num_iter_list)), num_iter_list.view(-1))).long()
 
         # Enlarge the batch size for correcting the number of batches
-
-        dis_model.train()
-        valid = True
-        if (num_loop) % 10 != 0:
-            valid = False
-
-
-        for i in range(args.dis_iter):
-            # Start validation at first moment
-            # Use the top 20000 sentences into sentences evaluation
-            if valid and i == 0:
-                train_loss, dis_lr, dis_val_loss, curr_val_loss = dis_retrain(dis_model, args=args, train_data=data, labels=labels,
-                     ix_to_word=ix_to_word, validation=valid, pos_valid_pairs=pos_valid_sen[:20000], neg_valid_pairs=neg_valid_sen[:20000], current_val_loss=dis_val_loss)
-
-                logging('current dis_val loss is {:.2f} at iteration {}'.format(curr_val_loss, num_loop), 'new_dis_val_loss.txt') 
-            else:
-                dis_retrain(dis_model, args=args, train_data=data, labels=labels,
-                            ix_to_word=ix_to_word, dis_lr=dis_lr)
-
-        dis_model.eval()
-        # Get the weight panalty
-        dis_panalty = []
-        for i in range(len(data)):
-            if labels[i] == 1:
-                dis_panalty.append(dis_evaluate_sen(data[i], dis_model, args))
-            else:
-                dis_panalty.append(1)
-
-
-        # Retrain the generator
-        print("Start retraining generator")
         
-        if torch.cuda.is_available():
-            if not args.cuda:
-                print("WARNING: You have a CUDA device, so you should probably run with --cuda")
-            else:
-                torch.cuda.manual_seed_all(args.seed)
+        if not args.frozen_dis:
+        
+            dis_model.train()
+            valid = True
+            if (num_loop) % 10 != 0:
+                valid = False
 
-        # At any point you can hit Ctrl + C to break out of training early.
-        for i in range(args.gen_iter):
-            gen_iter_train(voc, data, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, 50, dis_panalty,
-                           batch_size=args.batch_size * 2)
+
+            for i in range(args.dis_iter):
+                # Start validation at first moment
+                # Use the top 20000 sentences into sentences evaluation
+                if valid and i == 0:
+                    train_loss, dis_lr, dis_val_loss, curr_val_loss = dis_retrain(dis_model, args=args, train_data=data, labels=labels,
+                         ix_to_word=ix_to_word, validation=valid, pos_valid_pairs=pos_valid_sen[:20000], neg_valid_pairs=neg_valid_sen[:20000], current_val_loss=dis_val_loss)
+
+                    logging('current dis_val loss is {:.2f} at iteration {}'.format(curr_val_loss, num_loop), 'new_dis_val_loss.txt') 
+                else:
+                    dis_retrain(dis_model, args=args, train_data=data, labels=labels,
+                                ix_to_word=ix_to_word, dis_lr=dis_lr)
+        
+        if not args.frozen_gen:
+
+            dis_model.eval()
+            # Get the weight panalty
+            dis_panalty = []
+            dis_sum = 0
+            for i in range(len(data)):
+                if labels[i] == 1:
+                    dis_panalty.append(dis_evaluate_sen(data[i], dis_model, args))
+                    dis_sum += dis_panalty[i]
+                else:
+                    dis_panalty.append(1)
+            # Currently, use the mean of rewards as the REINFORCE baseline
+            baseline = dis_sum / (len(data) // 2)
+            for i in range(len(data)):
+                if labels[i] == 1:
+                    dis_panalty[i] = dis_panalty[i] - baseline 
+
+            # Retrain the generator
+            print("Start retraining generator")
+            
+            if torch.cuda.is_available():
+                if not args.cuda:
+                    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+                else:
+                    torch.cuda.manual_seed_all(args.seed)
+
+            # At any point you can hit Ctrl + C to break out of training early.
+            for i in range(args.gen_iter):
+                gen_iter_train(voc, data, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, 50, dis_panalty,
+                               batch_size=args.batch_size * 2)
+        filename = 'freq_decay_Reinforce_checkpoint_with_dis_val_loss'
+        if args.frozen_dis:
+            filename += '_no_retrain_discriminator'
+        if args.frozen_gen:
+            filename += '_no_retrain_generator'
+        
         if (num_loop) % args.log_interval == 0:
             torch.save({
                 'iteration': num_loop,
@@ -300,4 +314,4 @@ if __name__ == "__main__":
                 'embedding': embedding.state_dict(),
                 'num_loop': num_loop,
                 'dis_lr': dis_lr
-            }, os.path.join(args.save_dir, '{}_{}.pt'.format(num_loop + 1, 'freq_decay_Reinforce_checkpoint_with_dis_val_loss')))
+            }, os.path.join(args.save_dir, '{}_{}.pt'.format(num_loop + 1, filename)))

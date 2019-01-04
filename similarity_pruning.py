@@ -12,9 +12,9 @@ parser = argparse.ArgumentParser(description='UCT pruning')
 
 parser.add_argument('--save_dir', type=str, default='./data/save',
                     help="directory of data")
-parser.add_argument('--num_warm_up', type=int, default=10000,
+parser.add_argument('--num_warm_up', type=int, default=2000000,
                     help="number of sentences to warm up UCT")
-parser.add_argument('--batch_size', type=int, default=786,
+parser.add_argument('--batch_size', type=int, default=1024,
                     help="batch size")
 
 
@@ -54,6 +54,7 @@ embedding.to(args.device)
 encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
 encoder.load_state_dict(encoder_sd)
 encoder.to(args.device)
+encoder.eval()
 
 ### Choose sentences
 
@@ -87,20 +88,24 @@ def get_hidden(input_variable, lengths, encoder, args):
     input_variable = input_variable.to(device)
     lengths = lengths.to(device)
 
-    # Forward pass through encoder
-    encoder_outputs, encoder_hidden = encoder(input_variable, lengths)
+    with torch.no_grad():
+        # Forward pass through encoder
+        encoder_outputs, encoder_hidden = encoder(input_variable, lengths)
 
-    forward_hidden = torch.sum(encoder_hidden[:len(encoder_hidden) // 2], dim=0)
-    backward_hidden = torch.sum(encoder_hidden[len(encoder_hidden) // 2:], dim=0)
-    concatenated_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
+        forward_hidden = torch.sum(encoder_hidden[:len(encoder_hidden) // 2], dim=0)
+        backward_hidden = torch.sum(encoder_hidden[len(encoder_hidden) // 2:], dim=0)
+        concatenated_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
 
 
-    return concatenated_hidden
+    return concatenated_hidden.cpu()
 
 
 permutation = np.random.permutation(len(train_data))
 picked_pairs = []
-for i in permutation:
+
+for i in range(len(permutation)):
+    if i == args.num_warm_up:
+        break
     picked_pairs.append(train_data[i])
 
 n_iteration = len(picked_pairs) // args.batch_size
@@ -122,6 +127,7 @@ for iteration in range(1, n_iteration + 1):
     else:
         input_hidden = get_hidden(input_variable, lengths, encoder, args)
         input_hiddens = torch.cat((input_hiddens, input_hidden), dim=0)
+    print('Generated {} pairs hidden'.format(str(iteration * args.batch_size)))
 
 
 normalized_hiddens = input_hiddens / torch.sum(input_hiddens, dim=1).unsqueeze(dim=1)

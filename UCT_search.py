@@ -68,7 +68,6 @@ class Node(object):
 # state: the time step
 # Now the reward is finished
 def UCTSearch(init_reward, action_space, gen_model, encoder_output, init_hidden, dis_model, source, gen_cache, dis_cache, num_dis, dis_reward, args, ix_to_word, sentence=False):
-    #unk_id = word_to_ix[""]
     result = 0
     eos = False
     root = Node(None, 1, action_space)
@@ -98,8 +97,6 @@ def UCTSearch(init_reward, action_space, gen_model, encoder_output, init_hidden,
                 reward = gen_cache[wordtuple][0]
                 hidden = gen_cache[wordtuple][1]
             word = word.item()
-            # current.initialize_Node(word, reward, action_space)
-            #current.initialize_Node(word, reward, action_space)
             current.initialize_Node(word, reward, action_space)
             # store the trace of the selected actions
             current.next = current.children[word]
@@ -129,7 +126,7 @@ def UCTSearch(init_reward, action_space, gen_model, encoder_output, init_hidden,
         #print([ix_to_word[word] for word in wordlist])
 
         # Early stopping
-        if result >= 0.4 or rep_count == 15:
+        if result >= 0.5 or rep_count == 15:
             print(result)
             for sen in pair:
                 for word in sen:
