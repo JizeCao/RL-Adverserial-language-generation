@@ -2,9 +2,9 @@ import torch
 import itertools
 import random
 
-EOS_token = 1
-PAD_token = 24003
-SOS_token = 0
+EOS_token = 2
+PAD_token = 0
+SOS_token = 1
 
 
 def indexesFromSentence(voc, sentence):
@@ -78,7 +78,7 @@ def maskNLLLoss(inp, target, mask):
 
 
 def gen_iter_train(voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, clip,
-                   discriminator_panalty, n_iteration=1, batch_size=10):
+                   discriminator_panalty, n_iteration=1, batch_size=10, teacher_forcing_ratio=0):
     training_batches = [batch2TrainData(voc, pairs)
                             for _ in range(n_iteration)]
     for i in range(len(training_batches)):
@@ -86,7 +86,8 @@ def gen_iter_train(voc, pairs, encoder, decoder, encoder_optimizer, decoder_opti
         # Extract fields from batch
         input_variable, lengths, target_variable, mask, max_target_len = training_batch
         loss = gen_train(input_variable, lengths, target_variable, mask, max_target_len, encoder,
-                     decoder, embedding, encoder_optimizer, decoder_optimizer, batch_size, clip, discriminator_panalty)
+                     decoder, embedding, encoder_optimizer, decoder_optimizer, batch_size, clip, discriminator_panalty,
+                     teacher_forcing_ratio=teacher_forcing_ratio)
         print(loss)
 
 

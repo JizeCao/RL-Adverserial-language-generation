@@ -24,13 +24,13 @@ parser.add_argument('--mapping', type=str, default='',
                     help="directory of the generative and discriminative mapping")
 parser.add_argument('--max_seq_len', type=int, default=20,
                     help="length of the sequence")
-parser.add_argument('--dis_iter', type=int, default=5,
+parser.add_argument('--dis_iter', type=int, default=1,
                     help='number of dis_iter')
 parser.add_argument('--gen_iter', type=int, default=10,
                     help='number of gen_iter')
 parser.add_argument('--warm_words', type=str, default='I have been to somewhere',
                     help='warm-up words list')
-parser.add_argument('--exp_cont', type=float, default=3 / np.sqrt(2),
+parser.add_argument('--exp_cont', type=float, default=2 / np.sqrt(2),
                     help='warm-up words list')
 parser.add_argument('--num_iter', type=int, default=10000000,
                     help='number of iterations done for one MCTS search')
@@ -76,6 +76,8 @@ parser.add_argument('--SOS_id', type=int, default=0,
                     help="the index of the start of the sentence")
 parser.add_argument('--EOS_id', type=int, default=25001,
                     help="the index of the end of the sentence")
+parser.add_argument('--tf_ratio', type=int, default=0,
+                    help="ratio of sentence level teacher forcing (not the ratio between generated/true sens")
 parser.add_argument('--retrain', action='store_true', help="Retrain the RL checkpoint")
 parser.add_argument('--RL_index', type=int, default=0, help="RL index")
 
@@ -200,9 +202,15 @@ if __name__ == "__main__":
                 outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
                 outf.write('')
             # 0 because no need to random initialization
+            sample_file_name = 'sample'
+            if args.frozen_dis:
+                sample_file_name += '_frozen_dis'
+            if args.frozen_gen:
+                sample_file_name += '_frozen_gen'
+            sample_file_name += '.txt'
             _, dis_reward_sample, num_dis_sample, useless_list = generation(encoder, decoder, dis_model, num_loop,
                                                                             args, checking_list, 0, dis_reward_sample, num_dis_sample,
-                                                                            ix_to_word, dis_reward_list_sample, True, 'sample.txt', batch_size=len(checking_list))
+                                                                            ix_to_word, dis_reward_list_sample, True, sample_file_name, batch_size=len(checking_list))
 
         # Discriminating time!
 
@@ -293,7 +301,7 @@ if __name__ == "__main__":
             # At any point you can hit Ctrl + C to break out of training early.
             for i in range(args.gen_iter):
                 gen_iter_train(voc, data, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, 50, dis_panalty,
-                               batch_size=args.batch_size * 2)
+                               batch_size=args.batch_size * 2, teacher_forcing_ratio=args.tf_ratio)
         filename = 'freq_decay_Reinforce_checkpoint_with_dis_val_loss'
         if args.frozen_dis:
             filename += '_no_retrain_discriminator'
