@@ -341,6 +341,7 @@ def dis_retrain(dis_model, args, train_data, labels, ix_to_word=None, dis_lr=0.0
     dis_model.train()
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     dis_optimizer = optim.SGD(dis_model.parameters(), lr=dis_lr)
+    print('The discriminator learning rate is', str(dis_lr))
     criterion = nn.NLLLoss()
     dis_optimizer.zero_grad()    
     labels = torch.LongTensor(labels).to(device)
