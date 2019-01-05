@@ -15,11 +15,12 @@ from UCT_search import UCTSearch
 
 
 
-def warm_up(encoder, decoder, source, ix_to_word, device, SOS_inde=1):
+def warm_up(encoder, decoder, source, ix_to_word, args, SOS_index=1):
     with torch.no_grad():
         source = torch.Tensor(source).long()
         # source is the source sentence
-        encoder_output, init_reward, decoder_hidden = evaluate_sen(encoder, decoder, source, device)
+        encoder_output, init_reward, decoder_hidden = evaluate_sen(encoder, decoder, source, args.device,
+                                                                   SOS_token=args.SOS_id, EOS_token=args.EOS_id)
     # Get the dimension of the output
     return encoder_output, torch.exp(init_reward.view(-1)), decoder_hidden, source
 
@@ -48,6 +49,7 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
     else:
         writing_statu = 'w'
     sen_iter_list = []
+    dis_panalty_list = []
     with open(output_file, writing_statu) as outf:
         count = 0
         start_time = time.time()
@@ -57,40 +59,19 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
             if count >= batch_size:
                 break
             source = warm_up_words_list[start_index + i][0]
-            encoder_output, init_reward, hidden, source = warm_up(encoder, decoder, source, ix_to_word, args.device)
-            # Want a deep copy for the hidden state
-            #current_hidden = copy.deepcopy(hidden)
-            # Do UCT search
-                # Words_level mcts
-                # for i in range(args.seq_len - len(source)):
-                #     count += 1
-                #     # Use caches to accelerate
-                #     gen_cache = {}
-                #     dis_cache = {}
-                #     # Sentence level MCTS
-                #     word = UCTSearch(init_reward, action_space=len(ix_to_word), gen_model=decoder,
-                #               dis_model=dis_model, init_hidden=hidden, warm_up_word=source,
-                #               gen_cache=gen_cache, dis_cache=dis_cache, args=args)
-                #     source.append(word)
-                #     # Get the reward for the next word's generation
-                #     encoder_output, init_reward, current_hidden = generate_reward(decoder, word, current_hidden)
-                #     hidden = copy.deepcopy(current_hidden)
-                #     outf.write(ix_to_word[word] + ('\n' if i == args.seq_len - len(source) - 1 else ' '))
-                #     if count % args.log_interval == 0:
-                #         #sys.exit()
-                #         search_time = time.time() - start_time
-                #         print('| Generated {}/{} words | ave_time {:5.2f}s'.format(count, args.words, (time.time() - start_time) / count))
+            encoder_output, init_reward, hidden, source = warm_up(encoder, decoder, source, ix_to_word, args)
 
-                # Sentence level MCTS
             count += 1
             # Use caches to accelerate
             gen_cache = {}
             dis_cache = {}
             # Sentence level MCTS
-            gen_pair, dis_reward, num_dis, num_iter_sen= UCTSearch(init_reward, action_space=len(ix_to_word), gen_model=decoder,
-                                                                   dis_model=dis_model, init_hidden=hidden, source=source,
-                                                                   gen_cache = gen_cache, dis_cache=dis_cache, sentence=True, num_dis=num_dis, dis_reward = dis_reward, encoder_output=encoder_output, args=args,
-                                                                   ix_to_word=ix_to_word)
+            gen_pair, dis_reward, num_dis, num_iter_sen, dis_panalty = UCTSearch(init_reward, action_space=len(ix_to_word), gen_model=decoder,
+                                                                                 dis_model=dis_model, init_hidden=hidden, source=source,
+                                                                                 gen_cache = gen_cache, dis_cache=dis_cache, sentence=True,
+                                                                                 num_dis=num_dis, dis_reward=dis_reward, encoder_output=encoder_output,
+                                                                                 args=args,
+                                                                                 ix_to_word=ix_to_word)
             for i in range(len(gen_pair)):
                 if i == 0:
                     print("Source:", end=' ')
@@ -110,9 +91,37 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
                 print('| Generated {}/{} sentences | ave_time {:5.2f}s'.format(count, args.words, (time.time() - start_time) / count))
                 #sys.exit()
             gen_sen_pairs.append(gen_pair)
+            dis_panalty_list.append(dis_panalty)
+
     if num_loop % 20 == 0 and not evaluation:
         dis_reward_list.append(dis_reward / (num_dis + 1))
         pickle.dump(dis_reward_list, open('dis_reward_list_tf', 'wb'))
-    return gen_sen_pairs, dis_reward, num_dis, sen_iter_list
+
+    return gen_sen_pairs, dis_reward, num_dis, sen_iter_list, dis_panalty_list
+
+# Want a deep copy for the hidden state
+# current_hidden = copy.deepcopy(hidden)
+# Do UCT search
+# Words_level mcts
+# for i in range(args.seq_len - len(source)):
+#     count += 1
+#     # Use caches to accelerate
+#     gen_cache = {}
+#     dis_cache = {}
+#     # Sentence level MCTS
+#     word = UCTSearch(init_reward, action_space=len(ix_to_word), gen_model=decoder,
+#               dis_model=dis_model, init_hidden=hidden, warm_up_word=source,
+#               gen_cache=gen_cache, dis_cache=dis_cache, args=args)
+#     source.append(word)
+#     # Get the reward for the next word's generation
+#     encoder_output, init_reward, current_hidden = generate_reward(decoder, word, current_hidden)
+#     hidden = copy.deepcopy(current_hidden)
+#     outf.write(ix_to_word[word] + ('\n' if i == args.seq_len - len(source) - 1 else ' '))
+#     if count % args.log_interval == 0:
+#         #sys.exit()
+#         search_time = time.time() - start_time
+#         print('| Generated {}/{} words | ave_time {:5.2f}s'.format(count, args.words, (time.time() - start_time) / count))
+
+# Sentence level MCTS
 
 

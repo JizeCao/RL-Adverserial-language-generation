@@ -59,22 +59,24 @@ def load_model_dictionary_pairs(args, dis_model=True, only_data=False):
     decoder.load_state_dict(decoder_sd)
     encoder.to(args.device)
     decoder.to(args.device)
-    encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
-    encoder_optimizer.load_state_dict(encoder_optimizer_sd)
-    decoder_optimizer.load_state_dict(decoder_optimizer_sd)
 
+    if args.adam:
+        encoder_optimizer = optim.Adam(encoder.parameters(), lr=args.gen_lr)
+        decoder_optimizer = optim.Adam(decoder.parameters(), lr=args.gen_lr)
+    else:
+        encoder_optimizer = optim.SGD(encoder.parameters(), lr=args.gen_lr, momentum=0.8)
+        decoder_optimizer = optim.SGD(decoder.parameters(), lr=args.gen_lr, momentum=0.8)
     if dis_model:
         if args.cuda:
             #dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_correct_beam.pt'))
             dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_beam_frquency.pt'))
         else:
-            dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_correct_beam.pt'), map_location=lambda storage, loc:storage)
+            dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_beam_beam.pt'), map_location=lambda storage, loc:storage)
         #dis_model = hierEncoder(len(voc.index2word), 500)
         dis_model = hierEncoder_frequency(len(voc.index2word), 500)
         dis_model.load_state_dict(dis_checkpoint['disc'])
         dis_model.to(args.device)
-        dis_model_optimizer = optim.SGD(dis_model.parameters(), lr=args.dis_lr)
+        dis_model_optimizer = optim.SGD(dis_model.parameters(), lr=args.dis_lr, momentum=0.8)
         return encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, train_pos_pairs,\
                valid_pos_pairs, neg_train_pairs, neg_valid_pairs, embedding
     else:

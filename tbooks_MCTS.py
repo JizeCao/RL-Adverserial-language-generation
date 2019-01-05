@@ -14,6 +14,7 @@ from gen_utils import gen_iter_train
 from collections import Counter
 from model import EncoderRNN, LuongAttnDecoderRNN, hierEncoder
 from MCTS_generation import generation
+from MCTS import generate_sens_uct
 import math
 
 
@@ -82,8 +83,6 @@ parser.add_argument('--retrain', action='store_true', help="Retrain the RL check
 parser.add_argument('--RL_index', type=int, default=0, help="RL index")
 
 # Discriminator retraining parameters:
-parser.add_argument('--pos_data', type=str, default="try_model/",
-                    help='positive data')
 parser.add_argument('--gen_lr', type=float, default=0.001,
                     help='initial learning rate')
 parser.add_argument('--dis_lr', type=float, default=0.001,
@@ -94,14 +93,10 @@ parser.add_argument('--epochs', type=int, default=1,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=100, metavar='N',
                     help='batch size')
-parser.add_argument('--bptt', type=int, default=70,
-                    help='sequence length')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
-parser.add_argument('--nonmono', type=int, default=5,
-                    help='random seed')
-parser.add_argument('--save', type=str, default='test_dis',
-                    help='path to save the final model')
+parser.add_argument('--adam', action='store_true',
+                    help='Adam optimizer')
 parser.add_argument('--embedding', action='store_true',
                     help='use embedding to generate sentences')
 parser.add_argument('--frozen_dis', action='store_true',
@@ -113,17 +108,39 @@ args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 args.device = device
 
-# def logging(s, print_=True, log_=True):
-#     if print_:
-#         print(s)
-#     if log_:
-#         with open(os.path.join(args.save, 'log.txt'), 'a+') as f_log:
-#             f_log.write(s + '\n')
 
+def training_data_permutation(pos_train_sen, start_index, dis_panalty_list=None):
 
-def generate_randint_list(args, sentence_list_len):
-    np.random.seed(args.seed)
-    return [np.random.randint(0, sentence_list_len) for _ in range(args.checking_words)]
+    pos_data = copy.deepcopy(pos_train_sen[start_index: start_index + args.batch_size])
+    neg_data = gen_sen_list
+    labels = np.append(np.zeros(len(pos_data)), np.ones(len(neg_data))).reshape((-1, 1))
+    permute = np.random.permutation(len(pos_data) + len(neg_data))
+    # add_labels(pos_data, neg_data)
+    data = pos_data + neg_data
+    data = [data[i] for i in permute]
+    labels = labels[permute]
+
+    # Create [pos_panalty * len(pos_data), dis_panalties]
+    if dis_panalty_list is not None:
+        panalty_sum = 0
+
+        # Append 1 as the reward of the positive sentences
+        panalty_list = [1 for _ in range(len(pos_data))]
+
+        for panalty in dis_panalty_list:
+            panalty_sum += panalty
+
+        baseline = panalty_sum / len(neg_data)
+
+        for panalty in dis_panalty_list:
+            dis_panalty = panalty - baseline
+            panalty_list.append(dis_panalty)
+
+        panalty_list = [panalty_list[i] for i in permute]
+
+        return data, labels, panalty_list
+
+    return data, labels
 
 
 # Data are in pairs
@@ -131,6 +148,7 @@ if __name__ == "__main__":
 
     encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
     args.EOS_id = voc.word2index['<EOS>']
+    args.SOS_id = voc.word2index['<SOS>']
 
     if args.retrain:
         rl_checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_freq_decay_Reinforce_checkpoint_with_dis_val_loss.pt', 'rb'))
@@ -185,18 +203,8 @@ if __name__ == "__main__":
         encoder.eval()
         decoder.eval()
         dis_model.eval()
-        # Randomizing the initial word
-        start_index = np.random.randint(0, len(pos_train_sen) - args.batch_size)
-        print(start_index)
-        # First, initialize MCTS search
-        print("Start MCTS search")
-        if args.threshold == -1:
-            args.words = args.seq_len * len(pos_train_sen)
-        else:
-            args.words = args.threshold
-        print("Start generating sentences")
-        # TODO: Use the num_iter_list for generator's training
-        gen_sen_list, dis_reward, num_dis, num_iter_list = generation(encoder, decoder, dis_model, num_loop, args, pos_train_sen, start_index, dis_reward, num_dis, ix_to_word, dis_reward_list)
+
+        # Generate sampling data
         if num_loop % 40 == 1:
             with open('sample.txt', 'a') as outf:
                 outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
@@ -208,29 +216,24 @@ if __name__ == "__main__":
             if args.frozen_gen:
                 sample_file_name += '_frozen_gen'
             sample_file_name += '.txt'
-            _, dis_reward_sample, num_dis_sample, useless_list = generation(encoder, decoder, dis_model, num_loop,
-                                                                            args, checking_list, 0, dis_reward_sample, num_dis_sample,
-                                                                            ix_to_word, dis_reward_list_sample, True, sample_file_name, batch_size=len(checking_list))
+            _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
+                                                                                              args, checking_list, 0, dis_reward_sample, num_dis_sample,
+                                                                                              ix_to_word, dis_reward_list_sample, True, sample_file_name,
+                                                                                              batch_size=len(checking_list))
+
+
 
         # Discriminating time!
 
-        # Get the positive/negative data
-        pos_data = copy.deepcopy(pos_train_sen[start_index: start_index + args.batch_size])
-        neg_data = gen_sen_list
-        labels = np.append(np.zeros(len(pos_data)), np.ones(len(neg_data))).reshape((-1, 1))
-        permute = np.random.permutation(len(pos_data) + len(neg_data))
-        #add_labels(pos_data, neg_data)
-        data = pos_data + neg_data
-        data = [data[i] for i in permute]
-        labels = labels[permute]
+        # Getting the X, Y_hat using MCTS
+        gen_sen_list, dis_reward, num_dis, num_iter_list, start_index, dis_panalty_list = generate_sens_uct(encoder, decoder, dis_model,
+                                                                                                            num_loop, args, pos_train_sen,
+                                                                                                            dis_reward, num_dis,
+                                                                                                            ix_to_word, dis_reward_list)
 
-        # Contains the #iterations
-        # # num_iter_list = torch.Tensor(num_iter_list).append(torch.ones(len(num_iter_list))).long()
-        # num_iter_list = torch.Tensor(num_iter_list)
-        # # Normalize the iteration list
-        # num_iter_list = num_iter_list / torch.sum(num_iter_list)
-        # # Add placeholders
-        # num_iter_list = torch.cat((num_iter_list, torch.ones(len(num_iter_list))), 0)
+        # Get the positive/negative data and permute it such that its randomized
+        data, labels = training_data_permutation(pos_train_sen, start_index)
+
         print(num_iter_list)
         print("Start discriminating")
         # Previous set-up
@@ -242,12 +245,6 @@ if __name__ == "__main__":
         # args.save = '{}-{}'.format(args.absolute_save + "_dis", time.strftime("%Y%m%d-%H%M%S"))
         # create_exp_dir(args.save, scripts_to_save=['automatic_search.py', 'model.py'])
         print(start_index)
-
-        # if args.iter_decay:
-        #     num_iter_list = num_iter_list.numpy().reshape(len(num_iter_list), -1)
-        #     mega_train_data = np.append(mega_train_data, num_iter_list, axis=1)
-            #Suppose half positive data, half negative data
-            #num_iter_list = torch.cat((torch.zeros(len(num_iter_list)), num_iter_list.view(-1))).long()
 
         # Enlarge the batch size for correcting the number of batches
         
@@ -270,24 +267,25 @@ if __name__ == "__main__":
                 else:
                     dis_retrain(dis_model, args=args, train_data=data, labels=labels,
                                 ix_to_word=ix_to_word, dis_lr=dis_lr)
-        
+
+
+        ### Generating time!
+
         if not args.frozen_gen:
 
             dis_model.eval()
-            # Get the weight panalty
-            dis_panalty = []
-            dis_sum = 0
-            for i in range(len(data)):
-                if labels[i] == 1:
-                    dis_panalty.append(dis_evaluate_sen(data[i], dis_model, args))
-                    dis_sum += dis_panalty[i]
-                else:
-                    dis_panalty.append(1)
-            # Currently, use the mean of rewards as the REINFORCE baseline
-            baseline = dis_sum / (len(data) // 2)
-            for i in range(len(data)):
-                if labels[i] == 1:
-                    dis_panalty[i] = dis_panalty[i] - baseline 
+
+            # Getting the X, Y_hat using MCTS
+            gen_sen_list, dis_reward, num_dis, num_iter_list, start_index, dis_panalty_list = generate_sens_uct(encoder, decoder,
+                                                                                                                dis_model,
+                                                                                                                num_loop, args,
+                                                                                                                pos_train_sen,
+                                                                                                                dis_reward, num_dis,
+                                                                                                                ix_to_word,
+                                                                                                                dis_reward_list)
+
+            # Get the positive/negative data and permute it such that its randomized
+            data, labels, dis_panalty = training_data_permutation(pos_train_sen, start_index, dis_panalty_list)
 
             # Retrain the generator
             print("Start retraining generator")
@@ -302,6 +300,7 @@ if __name__ == "__main__":
             for i in range(args.gen_iter):
                 gen_iter_train(voc, data, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, 50, dis_panalty,
                                batch_size=args.batch_size * 2, teacher_forcing_ratio=args.tf_ratio)
+
         filename = 'freq_decay_Reinforce_checkpoint_with_dis_val_loss'
         if args.frozen_dis:
             filename += '_no_retrain_discriminator'
