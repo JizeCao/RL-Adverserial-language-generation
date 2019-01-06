@@ -11,90 +11,90 @@ import argparse
 from model import hierEncoder_frequency_batchwise, hierEncoder_frequency
 from search_utils import logging, Voc
 
-class critic(nn.Module):
-    def __init__(self, vocab_size, embedding_size):
-
-        super(critic, self).__init__()
-        self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
-        self.hidden_size = self.embedding_size  # the hidden size of GRU equals embedding size by default
-
-        self.embedding = nn.Embedding(self.vocab_size, self.embedding_size)
-        self.gru1 = nn.GRU(self.embedding_size, self.embedding_size)
-        self.gru2 = nn.GRU(self.embedding_size, 128)
-        self.linear1 = nn.Linear(128, 32)
-        self.linear2 = nn.Linear(32, 1)
-
-    def forward(self, pair=None, sources=None, targets=None, sources_length=None, targets_length=None, targets_order=None, to_device=True):
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-        if pair is not None:
-            # pair为对话 {x, y} 类型为torch.tensor()
-            x_length = pair[0].size(0)
-            y_length = pair[1].size(0)
-
-            if to_device:
-                hidden = self.initHidden().to(device)
-            else:
-                hidden = self.initHidden()
-
-            for i in range(x_length):
-                embedded_x = self.embedding(pair[0][i]).view(1, 1, -1)
-                _, hidden = self.gru1(embedded_x, hidden)
-            hidden_x = hidden  # x句的编码结果
-
-            if to_device:
-                hidden = self.initHidden().to(device)
-            else:
-                hidden = self.initHidden()
-
-            for i in range(y_length):
-                embedded_y = self.embedding(pair[1][i]).view(1, 1, -1)
-                _, hidden = self.gru1(embedded_y, hidden)
-            hidden_y = hidden  # y句的编码结果
-
-            if to_device:
-                hidden = torch.zeros(1, 1, 128).to(device)
-            else:
-                hidden = torch.zeros(1, 1, 128)
-
-            _, hidden = self.gru2(hidden_x, hidden)
-            _, hidden = self.gru2(hidden_y, hidden)
-            hidden_xy = hidden  # 得到{x，y}编码结果
-
-            max_frequency = self.count_max_frequency(pair[1]).to(device)
-            output = F.relu(self.linear1(hidden_xy.squeeze()))
-
-            output = self.linear2(output)
-
-
-            return output
-
-        sources = sources.to(device)
-        targets = targets.to(device)
-        # pair为对话 {x, y} 类型为torch.tensor()
-        embedded_sources = self.embedding(sources)
-        embedded_targets = self.embedding(targets)
-
-
-        packed_sources = torch.nn.utils.rnn.pack_padded_sequence(embedded_sources, sources_length)
-        packed_targets = torch.nn.utils.rnn.pack_padded_sequence(embedded_targets, targets_length)
-
-        # Source level GRU
-        _, hidden_sources = self.gru1(packed_sources)
-        _, hidden_targets = self.gru1(packed_targets)
-
-        # Change the hidden state to correct order
-        hidden_targets = hidden_targets[:, targets_order, :]
-        # Sentence level GRU, Check whether the dimension is correct!
-        _, hidden = self.gru2(hidden_sources, None)
-        _, hidden = self.gru2(hidden_targets, hidden)
-
-        output = F.relu(self.linear1(hidden.squeeze()))
-
-        output = self.linear2(output)
-
-        return output
+# class critic(nn.Module):
+#     def __init__(self, vocab_size, embedding_size):
+#
+#         super(critic, self).__init__()
+#         self.vocab_size = vocab_size
+#         self.embedding_size = embedding_size
+#         self.hidden_size = self.embedding_size  # the hidden size of GRU equals embedding size by default
+#
+#         self.embedding = nn.Embedding(self.vocab_size, self.embedding_size)
+#         self.gru1 = nn.GRU(self.embedding_size, self.embedding_size)
+#         self.gru2 = nn.GRU(self.embedding_size, 128)
+#         self.linear1 = nn.Linear(128, 32)
+#         self.linear2 = nn.Linear(32, 1)
+#
+#     def forward(self, pair=None, sources=None, targets=None, sources_length=None, targets_length=None, targets_order=None, to_device=True):
+#         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#
+#         if pair is not None:
+#             # pair为对话 {x, y} 类型为torch.tensor()
+#             x_length = pair[0].size(0)
+#             y_length = pair[1].size(0)
+#
+#             if to_device:
+#                 hidden = self.initHidden().to(device)
+#             else:
+#                 hidden = self.initHidden()
+#
+#             for i in range(x_length):
+#                 embedded_x = self.embedding(pair[0][i]).view(1, 1, -1)
+#                 _, hidden = self.gru1(embedded_x, hidden)
+#             hidden_x = hidden  # x句的编码结果
+#
+#             if to_device:
+#                 hidden = self.initHidden().to(device)
+#             else:
+#                 hidden = self.initHidden()
+#
+#             for i in range(y_length):
+#                 embedded_y = self.embedding(pair[1][i]).view(1, 1, -1)
+#                 _, hidden = self.gru1(embedded_y, hidden)
+#             hidden_y = hidden  # y句的编码结果
+#
+#             if to_device:
+#                 hidden = torch.zeros(1, 1, 128).to(device)
+#             else:
+#                 hidden = torch.zeros(1, 1, 128)
+#
+#             _, hidden = self.gru2(hidden_x, hidden)
+#             _, hidden = self.gru2(hidden_y, hidden)
+#             hidden_xy = hidden  # 得到{x，y}编码结果
+#
+#             max_frequency = self.count_max_frequency(pair[1]).to(device)
+#             output = F.relu(self.linear1(hidden_xy.squeeze()))
+#
+#             output = self.linear2(output)
+#
+#
+#             return output
+#
+#         sources = sources.to(device)
+#         targets = targets.to(device)
+#         # pair为对话 {x, y} 类型为torch.tensor()
+#         embedded_sources = self.embedding(sources)
+#         embedded_targets = self.embedding(targets)
+#
+#
+#         packed_sources = torch.nn.utils.rnn.pack_padded_sequence(embedded_sources, sources_length)
+#         packed_targets = torch.nn.utils.rnn.pack_padded_sequence(embedded_targets, targets_length)
+#
+#         # Source level GRU
+#         _, hidden_sources = self.gru1(packed_sources)
+#         _, hidden_targets = self.gru1(packed_targets)
+#
+#         # Change the hidden state to correct order
+#         hidden_targets = hidden_targets[:, targets_order, :]
+#         # Sentence level GRU, Check whether the dimension is correct!
+#         _, hidden = self.gru2(hidden_sources, None)
+#         _, hidden = self.gru2(hidden_targets, hidden)
+#
+#         output = F.relu(self.linear1(hidden.squeeze()))
+#
+#         output = self.linear2(output)
+#
+#         return output
 
 def generate_reward(pos_data, neg_data, modelD, vocab, batch_size=512):
 
@@ -124,7 +124,7 @@ def generate_reward(pos_data, neg_data, modelD, vocab, batch_size=512):
             #  Get the order that is used to retrive the original order
             retrive_order = np.argsort(output_order)
 
-            output = modelD(sources=input_data, targets=output_data, sources_length=input_length,
+            output, = modelD(sources=input_data, targets=output_data, sources_length=input_length,
                             targets_length=output_length, targets_order=retrive_order)
 
             batch_rewards = torch.exp(output[:, 0])
@@ -135,98 +135,203 @@ def generate_reward(pos_data, neg_data, modelD, vocab, batch_size=512):
     return rewards, data_batches
 
 
-def critic_train(critic_model, modelD, pos_train, neg_train, pos_valid, neg_valid, EOS_token, vocab, learning_rate=0.001, batch_size=128,
+def critic_train(modelD, pos_train, neg_train, pos_valid, neg_valid, EOS_token, vocab, learning_rate=0.001, batch_size=128,
                  n_iteration=5000, to_device=True):
 
-    critic_model.train()
-    critic_optimizer = optim.SGD(critic_model.parameters(), lr=learning_rate, momentum=0.8)
-    modelD.eval()
-
-    # prepare data
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-    total_loss = torch.Tensor([0]).to(device)
-    start_time = time.time()
+    # Only train on teh final critic network
+    critic_optimizer = optim.SGD(modelD.baseline.parameters(), lr=learning_rate, momentum=0.8)
     criterion = nn.MSELoss()
 
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    rewards, data_batches = generate_reward(pos_train, neg_train, modelD, vocab, batch_size=batch_size)
+    pos_data_batches = [batch2TrainData(vocab, pos_train[i * batch_size: i * batch_size + batch_size]) for i in
+                        range(len(pos_train) // batch_size)]
+    neg_data_batches = [batch2TrainData(vocab, neg_train[i * batch_size: i * batch_size + batch_size]) for i in
+                        range(len(neg_train) // batch_size)]
+
+    data_batches = pos_data_batches + neg_data_batches
+
+    # Permute the data
 
     permute = np.random.permutation(len(data_batches))
     data_batches = [data_batches[i] for i in permute]
-    rewards = [rewards[i] for i in permute]
-    num_batch = 0
-    val_loss = 1000000000
+
     best_iteration = 0
+    start_time = time.time()
+
+    total_loss = 0
+    val_loss = 1000000000
+
+    num_batch = 0
 
     try:
-
         for iteration in range(n_iteration):
             for batch in data_batches:
-
-                reward = rewards[num_batch]
+                modelD.train()
 
                 input_data, input_length, output_data, output_length, output_order, input_order = batch
 
                 #  Get the order that is used to retrive the original order
                 retrive_order = np.argsort(output_order)
 
-                output = critic_model(sources=input_data, targets=output_data, sources_length=input_length,
-                                targets_length=output_length, targets_order=retrive_order)
+                output, baseline = modelD(sources=input_data, targets=output_data, sources_length=input_length,
+                                          targets_length=output_length, targets_order=retrive_order, baseline=True)
 
-                loss = criterion(output.squeeze(), reward)
-                total_loss += loss
+                batch_rewards = torch.exp(output[:, 0])
 
+                loss = criterion(baseline.squeeze(), batch_rewards)
                 loss.backward()
                 critic_optimizer.step()
 
+
+                total_loss += loss.item()
+
                 num_batch += 1
 
-                print('The train loss for iteration {}, at batches {} / {}'.format(loss, num_batch, len(data_batches)))
+                logging('The train loss for iteration {}, at batches {} / {}'.format(loss, num_batch, len(data_batches)),
+                        log_name='critic_log.txt')
 
-            curr_val_loss = critic_evaluation(critic_model, modelD, pos_valid, neg_valid, EOS_token, vocab, batch_size=512)
+            curr_val_loss = critic_evaluation(modelD, pos_valid, neg_valid, EOS_token, vocab, batch_size=512)
 
             if curr_val_loss < val_loss:
                 best_iteration = iteration
                 torch.save({
                     'iteration': iteration,
                     'val_loss': val_loss,
-                    'disc': critic_model.state_dict()
+                    'disc': modelD.state_dict()
                 }, 'critic_model_' + str(iteration) + '.pt')
     except KeyboardInterrupt:
-        print('The best val_loss is {:2f}, at iterations {}'.format(val_loss, best_iteration))
+        logging('The best val_loss is {:2f}, at iterations {}'.format(val_loss, best_iteration),
+                log_name='critic_log.txt')
 
 
-def critic_evaluation(critic_model, modelD, pos_valid, neg_valid, EOS_token, vocab, batch_size=512):
+    # critic_model.train()
+    # critic_optimizer = optim.SGD(critic_model.parameters(), lr=learning_rate, momentum=0.8)
+    # modelD.eval()
+    #
+    # # prepare data
+    # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    #
+    # total_loss = torch.Tensor([0]).to(device)
+    # start_time = time.time()
+    # criterion = nn.MSELoss()
+    #
+    #
+    # rewards, data_batches = generate_reward(pos_train, neg_train, modelD, vocab, batch_size=batch_size)
+    #
+    # permute = np.random.permutation(len(data_batches))
+    # data_batches = [data_batches[i] for i in permute]
+    # rewards = [rewards[i] for i in permute]
+    # num_batch = 0
+    # val_loss = 1000000000
+    # best_iteration = 0
+    #
+    # try:
+    #
+    #     for iteration in range(n_iteration):
+    #         for batch in data_batches:
+    #
+    #             reward = rewards[num_batch]
+    #
+    #             input_data, input_length, output_data, output_length, output_order, input_order = batch
+    #
+    #             #  Get the order that is used to retrive the original order
+    #             retrive_order = np.argsort(output_order)
+    #
+    #             output = critic_model(sources=input_data, targets=output_data, sources_length=input_length,
+    #                             targets_length=output_length, targets_order=retrive_order)
+    #
+    #             loss = criterion(output.squeeze(), reward)
+    #             total_loss += loss
+    #
+    #             loss.backward()
+    #             critic_optimizer.step()
+    #
+    #             num_batch += 1
+    #
+    #             print('The train loss for iteration {}, at batches {} / {}'.format(loss, num_batch, len(data_batches)))
+    #
+    #         curr_val_loss = critic_evaluation(critic_model, modelD, pos_valid, neg_valid, EOS_token, vocab, batch_size=512)
+    #
+    #         if curr_val_loss < val_loss:
+    #             best_iteration = iteration
+    #             torch.save({
+    #                 'iteration': iteration,
+    #                 'val_loss': val_loss,
+    #                 'disc': critic_model.state_dict()
+    #             }, 'critic_model_' + str(iteration) + '.pt')
+    # except KeyboardInterrupt:
+    #     print('The best val_loss is {:2f}, at iterations {}'.format(val_loss, best_iteration))
 
-    critic_model.eval()
+
+def critic_evaluation(modelD, pos_valid, neg_valid, EOS_token, vocab, batch_size=512):
+
+    modelD.eval()
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+    pos_data_batches = [batch2TrainData(vocab, pos_valid[i * batch_size: i * batch_size + batch_size]) for i in
+                        range(len(pos_valid) // batch_size)]
+    neg_data_batches = [batch2TrainData(vocab, neg_valid[i * batch_size: i * batch_size + batch_size]) for i in
+                        range(len(neg_valid) // batch_size)]
+
+    data_batches = pos_data_batches + neg_data_batches
+
+
+
+    start_time = time.time()
+    criterion = nn.NLLLoss()
+
     total_loss = 0
-    criterion =  nn.NLLLoss()
-
-    rewards, data_batches = generate_reward(pos_valid, neg_valid, modelD, vocab, batch_size=batch_size)
-
 
     with torch.no_grad():
 
-        batch_index = 0
         for batch in data_batches:
-
-            reward = rewards[batch_index]
             input_data, input_length, output_data, output_length, output_order, input_order = batch
 
             #  Get the order that is used to retrive the original order
             retrive_order = np.argsort(output_order)
 
-            output = critic_model(sources=input_data, targets=output_data, sources_length=input_length,
-                                  targets_length=output_length, targets_order=retrive_order)
+            output, baseline = modelD(sources=input_data, targets=output_data, sources_length=input_length,
+                                      targets_length=output_length, targets_order=retrive_order, baseline=True)
 
-            loss = criterion(output, reward)
-            total_loss += loss
-            batch_index += 1
+            batch_rewards = torch.exp(output[:, 0])
 
-    print('Average MSE loss', str(total_loss / len(data_batches)))
+            loss = criterion(baseline.squeeze(), batch_rewards)
+
+            total_loss += loss.item()
+
+    logging('Average MSE loss', str(total_loss / len(data_batches)), log_name='critic_log.txt')
 
     return total_loss / len(data_batches)
+
+
+
+# critic_model.eval()
+    # total_loss = 0
+    # criterion = nn.MSELoss()
+    #
+    # rewards, data_batches = generate_reward(pos_valid, neg_valid, modelD, vocab, batch_size=batch_size)
+    #
+    #
+    # with torch.no_grad():
+    #
+    #     batch_index = 0
+    #     for batch in data_batches:
+    #
+    #         reward = rewards[batch_index]
+    #         input_data, input_length, output_data, output_length, output_order, input_order = batch
+    #
+    #         #  Get the order that is used to retrive the original order
+    #         retrive_order = np.argsort(output_order)
+    #
+    #         output = critic_model(sources=input_data, targets=output_data, sources_length=input_length,
+    #                               targets_length=output_length, targets_order=retrive_order)
+    #
+    #         loss = criterion(output, reward)
+    #         total_loss += loss
+    #         batch_index += 1
+    #
+    # print('Average MSE loss', str(total_loss / len(data_batches)))
 
 def load_data(args):
     #voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
@@ -274,12 +379,7 @@ if __name__ == '__main__':
 
     EOS_token = voc.word2index['<EOS>']
 
-    critic_model = critic(len(voc.index2word), 500)
-
-    if args.cuda:
-        critic_model.cuda()
-
-    critic_train(critic_model, modelD, train_pos_pairs, neg_train_pairs, valid_pos_pairs, neg_valid_pairs, EOS_token, voc)
+    critic_train(modelD, train_pos_pairs, neg_train_pairs, valid_pos_pairs, neg_valid_pairs, EOS_token, voc)
 
 
 

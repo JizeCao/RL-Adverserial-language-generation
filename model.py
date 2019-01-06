@@ -252,6 +252,7 @@ class hierEncoder_frequency_batchwise(nn.Module):
         self.gru2 = nn.GRU(self.embedding_size, 128)
         self.linear1 = nn.Linear(128, 32)
         self.linear2 = nn.Linear(33, 2)
+        self.baseline = nn.Linear(33, 1)
 
     def count_max_frequency(self, sen):
         counts = torch.zeros(torch.max(sen).item() + 1)
@@ -259,7 +260,7 @@ class hierEncoder_frequency_batchwise(nn.Module):
             counts[i] += 1
         return torch.max(counts).view(1)
 
-    def forward(self, pair=None, sources=None, targets=None, sources_length=None, targets_length=None, targets_order=None, to_device=True):
+    def forward(self, pair=None, sources=None, targets=None, sources_length=None, targets_length=None, targets_order=None, to_device=True, baseline=False):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         if pair is not None:
@@ -328,10 +329,16 @@ class hierEncoder_frequency_batchwise(nn.Module):
         max_frequency = torch.Tensor([self.count_max_frequency(targets[:, i]) for i in range(len(targets[0]))]).unsqueeze(dim=1).to(device)
         output = F.relu(self.linear1(hidden.squeeze()))
         output = torch.cat((output, max_frequency), dim=1)
-        output = F.relu(self.linear2(output))
-        output = F.log_softmax(output, dim=1)  ## 注意此处的输出为 log_softmax
 
-        return output
+        output_2class = F.relu(self.linear2(output))
+        output_2class = F.log_softmax(output_2class, dim=1)  ## 注意此处的输出为 log_softmax
+
+        if baseline:
+            estimate_reward = self.baseline(output)
+
+            return output_2class, estimate_reward
+
+        return output_2class
 
 
 if __name__ == '__main__':
