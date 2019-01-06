@@ -8,8 +8,8 @@ from torch import optim
 import pickle
 import os
 import argparse
-from model import hierEncoder_frequency_batchwise
-from search_utils import logging
+from model import hierEncoder_frequency_batchwise, hierEncoder_frequency
+from search_utils import logging, Voc
 
 class critic(nn.Module):
     def __init__(self, vocab_size, embedding_size):
@@ -227,17 +227,22 @@ def critic_evaluation(critic_model, modelD, pos_valid, neg_valid, EOS_token, voc
     return total_loss / len(data_batches)
 
 def load_data(args):
-    voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
-    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_train_sen_2000000.p'), 'rb'))
-    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_valid_sen_2000000.p'), 'rb'))
-    neg_train_pairs = pickle.load(
-        open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
-    neg_valid_pairs = pickle.load(
-        open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
+    #voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
+    #train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_train_sen_2000000.p'), 'rb'))
+    #valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_valid_sen_2000000.p'), 'rb'))
+    #neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
+    #neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
+
+    voc = pickle.load(open(os.path.join(args.save_dir, 'whole_data_voc.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
+    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_train.p'), 'rb'))
+    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_valid.p'), 'rb'))
 
     model_save_dir = os.path.join(args.save_dir, 'cb_model/Open_subtitles/3-3_512')
 
-    modelD = hierEncoder_frequency_batchwise(len(voc.index2word), 500)
+    #modelD = hierEncoder_frequency_batchwise(len(voc.index2word), 500)
+    modelD = hierEncoder_frequency(len(voc.index2word), 500)
 
     if args.cuda:
         dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_beam_frquency.pt'))
@@ -250,7 +255,7 @@ def load_data(args):
 
     return voc, modelD, train_pos_pairs, valid_pos_pairs, neg_train_pairs, neg_valid_pairs
 
-if '__name__' == '__main__':
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='UCT based on the language model')
     parser.add_argument('--save_dir', type=str, default='./data/save',
                         help='directory of the save place')
@@ -265,9 +270,11 @@ if '__name__' == '__main__':
 
     voc, modelD, train_pos_pairs, valid_pos_pairs, neg_train_pairs, neg_valid_pairs = load_data(args)
 
+    EOS_token = voc.word2index['<EOS>']
+
     critic_model = critic(len(voc.index2word), 500)
 
-    critic_train(critic_model)
+    critic_train(critic_model, modelD, train_pos_pairs, neg_train_pairs, valid_pos_pairs, neg_valid_pairs, EOS_token, voc)
 
 
 
