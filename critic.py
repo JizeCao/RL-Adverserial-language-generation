@@ -130,6 +130,8 @@ def generate_reward(pos_data, neg_data, modelD, vocab, batch_size=512):
             batch_rewards = torch.exp(output[:, 0])
             rewards.append(batch_rewards)
 
+    pickle.dump(rewards, open('Rewards', 'wb'))
+
     return rewards, data_batches
 
 
@@ -145,7 +147,7 @@ def critic_train(critic_model, modelD, pos_train, neg_train, pos_valid, neg_vali
 
     total_loss = torch.Tensor([0]).to(device)
     start_time = time.time()
-    criterion = nn.NLLLoss()
+    criterion = nn.MSELoss()
 
 
     rewards, data_batches = generate_reward(pos_train, neg_train, modelD, vocab, batch_size=batch_size)
@@ -159,7 +161,7 @@ def critic_train(critic_model, modelD, pos_train, neg_train, pos_valid, neg_vali
 
     try:
 
-        for iteration in n_iteration:
+        for iteration in range(n_iteration):
             for batch in data_batches:
 
                 reward = rewards[num_batch]
@@ -172,7 +174,7 @@ def critic_train(critic_model, modelD, pos_train, neg_train, pos_valid, neg_vali
                 output = critic_model(sources=input_data, targets=output_data, sources_length=input_length,
                                 targets_length=output_length, targets_order=retrive_order)
 
-                loss = criterion(output, reward)
+                loss = criterion(output.squeeze(), reward)
                 total_loss += loss
 
                 loss.backward()
@@ -180,7 +182,7 @@ def critic_train(critic_model, modelD, pos_train, neg_train, pos_valid, neg_vali
 
                 num_batch += 1
 
-                print('The train loss for iteration {}, at batches {} / {}'.format(iteration, num_batch, len(data_batches)))
+                print('The train loss for iteration {}, at batches {} / {}'.format(loss, num_batch, len(data_batches)))
 
             curr_val_loss = critic_evaluation(critic_model, modelD, pos_valid, neg_valid, EOS_token, vocab, batch_size=512)
 
@@ -234,10 +236,10 @@ def load_data(args):
     #neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
 
     voc = pickle.load(open(os.path.join(args.save_dir, 'whole_data_voc.p'), 'rb'))
-    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
-    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
-    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_train.p'), 'rb'))
-    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_valid.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))[:2000]
+    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))[:2000]
+    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_train.p'), 'rb'))[:2000]
+    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_valid.p'), 'rb'))[:2000]
 
     model_save_dir = os.path.join(args.save_dir, 'cb_model/Open_subtitles/3-3_512')
 
