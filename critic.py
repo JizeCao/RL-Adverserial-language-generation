@@ -274,6 +274,9 @@ if __name__ == '__main__':
 
     critic_model = critic(len(voc.index2word), 500)
 
+    if args.cuda:
+        critic_model.cuda()
+
     critic_train(critic_model, modelD, train_pos_pairs, neg_train_pairs, valid_pos_pairs, neg_valid_pairs, EOS_token, voc)
 
 
