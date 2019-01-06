@@ -240,11 +240,19 @@ def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
 
 
 def load_data(args):
-    voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
-    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_train_sen_2000000.p'), 'rb'))
-    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_valid_sen_2000000.p'), 'rb'))
-    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
-    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
+    #voc = pickle.load(open(os.path.join(args.save_dir, 'processed_voc.p'), 'rb'))
+    #train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_train_sen_2000000.p'), 'rb'))
+    #valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'processed_valid_sen_2000000.p'), 'rb'))
+    #neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
+    #neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
+
+    voc = pickle.load(open(os.path.join(args.save_dir, 'whole_data_voc.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_sen_2000000.p'), 'rb'))
+    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_sen_2000000.p'), 'rb'))
+    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_train.p'), 'rb'))
+    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_valid.p'), 'rb'))
+
+
 
     return voc, train_pos_pairs, valid_pos_pairs, neg_train_pairs, neg_valid_pairs
 
