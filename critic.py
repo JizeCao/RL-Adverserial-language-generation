@@ -162,6 +162,7 @@ def critic_train(critic_model, modelD, pos_train, neg_train, pos_valid, neg_vali
     try:
 
         for iteration in range(n_iteration):
+            num_batch = 0
             for batch in data_batches:
 
                 reward = rewards[num_batch]
