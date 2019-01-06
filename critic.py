@@ -241,8 +241,8 @@ def load_data(args):
 
     model_save_dir = os.path.join(args.save_dir, 'cb_model/Open_subtitles/3-3_512')
 
-    #modelD = hierEncoder_frequency_batchwise(len(voc.index2word), 500)
-    modelD = hierEncoder_frequency(len(voc.index2word), 500)
+    modelD = hierEncoder_frequency_batchwise(len(voc.index2word), 500)
+    #modelD = hierEncoder_frequency(len(voc.index2word), 500)
 
     if args.cuda:
         dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_beam_frquency.pt'))
