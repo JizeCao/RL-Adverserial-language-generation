@@ -73,7 +73,7 @@ def inputVar(l, voc):
     return padVar, lengths
 
 # Returns all items for a given batch of pairs
-def batch2TrainData(voc, pair_batch):
+def batch2TrainData(voc, pair_batch, only_source=False):
     # pair_batch.sort(key=lambda x: len(x[0].split(" ")), reverse=True)
     pair_batch.sort(key=lambda x: len(x[0]), reverse=True)
     input_batch, output_batch = [], []
@@ -81,7 +81,7 @@ def batch2TrainData(voc, pair_batch):
         input_batch.append(pair[0])
         output_batch.append(pair[1])
     inp, lengths = inputVar(input_batch, voc)
-    return inp, lengths
+    return inp, lengths, input_batch, output_batch
 
 def get_hidden(input_variable, lengths, encoder, args):
     device = args.device
@@ -96,44 +96,59 @@ def get_hidden(input_variable, lengths, encoder, args):
         backward_hidden = torch.sum(encoder_hidden[len(encoder_hidden) // 2:], dim=0)
         concatenated_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
 
-
     return concatenated_hidden.cpu()
 
-
-permutation = np.random.permutation(len(train_data))
-picked_pairs = []
-
-for i in range(len(permutation)):
-    if i == args.num_warm_up:
-        break
-    picked_pairs.append(train_data[i])
-
-n_iteration = len(picked_pairs) // args.batch_size
-
-training_batches = [batch2TrainData(voc, [picked_pairs[i + j * args.batch_size] for i in range(args.batch_size)])
-                            for j in range(n_iteration)]
-
-input_hiddens = None
-
-for iteration in range(1, n_iteration + 1):
-
-    training_batch = training_batches[iteration - 1]
-    # Extract fields from batch
-    input_variable, lengths = training_batch
-
-    if input_hiddens is None:
-        # Run a training iteration with batch
-        input_hiddens = get_hidden(input_variable, lengths, encoder, args)
-    else:
-        input_hidden = get_hidden(input_variable, lengths, encoder, args)
-        input_hiddens = torch.cat((input_hiddens, input_hidden), dim=0)
-    print('Generated {} pairs hidden'.format(str(iteration * args.batch_size)))
+def get_sen_hidden(sen, encoder, voc, args):
+    batch2TrainData(voc, [sen, 0])
 
 
-normalized_hiddens = input_hiddens / torch.sum(input_hiddens, dim=1).unsqueeze(dim=1)
+if __name__ == '__main__':
 
-torch.save(normalized_hiddens, 'heuristic_normalized_sentences_hiddens')
-pickle.dump(picked_pairs, open('heuristic_sentences', 'wb'))
+    permutation = np.random.permutation(len(train_data))
+    picked_pairs = []
+
+    for i in range(len(permutation)):
+        if i == args.num_warm_up:
+            break
+        picked_pairs.append(train_data[i])
+
+    n_iteration = len(picked_pairs) // args.batch_size
+
+    training_batches = [batch2TrainData(voc, [picked_pairs[i + j * args.batch_size] for i in range(args.batch_size)])
+                                for j in range(n_iteration)]
+
+    # Data will be sorted by length by length, reformat it
+    input_hiddens = None
+    input_sens = None
+    output_sens = None
+
+    for iteration in range(1, n_iteration + 1):
+
+        training_batch = training_batches[iteration - 1]
+        # Extract fields from batch
+        input_variable, lengths, input_batch, output_batch = training_batch
+        if input_sens is None:
+            input_sens= input_batch
+            output_sens = output_batch
+        else:
+            input_sens += input_batch
+            output_sens += output_batch
+
+        if input_hiddens is None:
+            # Run a training iteration with batch
+            input_hiddens = get_hidden(input_variable, lengths, encoder, args)
+        else:
+            input_hidden = get_hidden(input_variable, lengths, encoder, args)
+            input_hiddens = torch.cat((input_hiddens, input_hidden), dim=0)
+        print('Generated {} pairs hidden'.format(str(iteration * args.batch_size)))
+
+    # Reformat the sentences' list
+    rearranged_sens = [[input_sens[i], output_sens[i]] for i in range(len(input_sens))]
+
+    normalized_hiddens = input_hiddens / torch.sum(input_hiddens, dim=1).unsqueeze(dim=1)
+
+    torch.save(normalized_hiddens, 'heuristic_normalized_sentences_hiddens')
+    pickle.dump(rearranged_sens, open('heuristic_sentences', 'wb'))
 
 
 
