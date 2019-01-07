@@ -362,7 +362,7 @@ def dis_retrain(dis_model, args, train_data, labels, ix_to_word=None, dis_lr=0.0
         loss += current_loss
     loss.backward()
     
-
+    _ = torch.nn.utils.clip_grad_norm_(dis_model.parameters(), args.clip)
     dis_optimizer.step()
     print('Accuracy: ', Accuracy / len(labels), 'loss: ', loss)
     print('Average pos prob: ', total_pos_prob / len(labels))
