@@ -8,53 +8,6 @@ from model import EncoderRNN
 import itertools
 from search_utils import Voc, tensorFromPairEval
 
-parser = argparse.ArgumentParser(description='UCT pruning')
-
-parser.add_argument('--save_dir', type=str, default='./data/save',
-                    help="directory of data")
-parser.add_argument('--num_warm_up', type=int, default=10000,
-                    help="number of sentences to warm up UCT")
-parser.add_argument('--batch_size', type=int, default=1000,
-                    help="batch size")
-
-
-args = parser.parse_args()
-
-args.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
-### Load the encoder and data
-hidden_size = 512
-encoder_n_layers = 3
-dropout = 0.2
-
-model_save_dir = os.path.join(args.save_dir, 'cb_model/Open_subtitles/3-3_512')
-
-train_data = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
-voc = pickle.load(open(os.path.join(args.save_dir, 'Vocabulary'), 'rb'))
-
-loadFilename = os.path.join(model_save_dir, 'best_model_checkpoint_original_setting_no_valid.pt')
-
-if torch.cuda.is_available():
-    cp = torch.load(open(loadFilename, 'rb'))
-else:
-    cp = torch.load(open(loadFilename, 'rb'), map_location=lambda storage, loc: storage)
-
-
-voc.__dict__ = cp['voc_dict']
-embedding_sd = cp['embedding']
-encoder_sd = cp['en']
-
-PAD_token = voc.word2index['<PAD>']
-EOS_token = voc.word2index['<EOS>']
-
-
-embedding = nn.Embedding(voc.num_words, hidden_size)
-embedding.load_state_dict(embedding_sd)
-embedding.to(args.device)
-encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
-encoder.load_state_dict(encoder_sd)
-encoder.to(args.device)
-encoder.eval()
 
 ### Choose sentences
 
@@ -146,6 +99,51 @@ def evaluate_sen(data_source, model, args):
 
 
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(description='UCT pruning')
+
+    parser.add_argument('--save_dir', type=str, default='./data/save',
+                        help="directory of data")
+    parser.add_argument('--num_warm_up', type=int, default=10000,
+                        help="number of sentences to warm up UCT")
+    parser.add_argument('--batch_size', type=int, default=1000,
+                        help="batch size")
+
+    args = parser.parse_args()
+
+    args.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
+    ### Load the encoder and data
+    hidden_size = 512
+    encoder_n_layers = 3
+    dropout = 0.2
+
+    model_save_dir = os.path.join(args.save_dir, 'cb_model/Open_subtitles/3-3_512')
+
+    train_data = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    voc = pickle.load(open(os.path.join(args.save_dir, 'Vocabulary'), 'rb'))
+
+    loadFilename = os.path.join(model_save_dir, 'best_model_checkpoint_original_setting_no_valid.pt')
+
+    if torch.cuda.is_available():
+        cp = torch.load(open(loadFilename, 'rb'))
+    else:
+        cp = torch.load(open(loadFilename, 'rb'), map_location=lambda storage, loc: storage)
+
+    voc.__dict__ = cp['voc_dict']
+    embedding_sd = cp['embedding']
+    encoder_sd = cp['en']
+
+    PAD_token = voc.word2index['<PAD>']
+    EOS_token = voc.word2index['<EOS>']
+
+    embedding = nn.Embedding(voc.num_words, hidden_size)
+    embedding.load_state_dict(embedding_sd)
+    embedding.to(args.device)
+    encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
+    encoder.load_state_dict(encoder_sd)
+    encoder.to(args.device)
+    encoder.eval()
 
     permutation = np.random.permutation(len(train_data))
     picked_pairs = []
