@@ -6,15 +6,15 @@ import torch.nn as nn
 import numpy as np
 from model import EncoderRNN
 import itertools
-from search_utils import Voc
+from search_utils import Voc, tensorFromPairEval
 
 parser = argparse.ArgumentParser(description='UCT pruning')
 
 parser.add_argument('--save_dir', type=str, default='./data/save',
                     help="directory of data")
-parser.add_argument('--num_warm_up', type=int, default=2000000,
+parser.add_argument('--num_warm_up', type=int, default=10000,
                     help="number of sentences to warm up UCT")
-parser.add_argument('--batch_size', type=int, default=1024,
+parser.add_argument('--batch_size', type=int, default=1000,
                     help="batch size")
 
 
@@ -75,6 +75,10 @@ def inputVar(l, voc):
 # Returns all items for a given batch of pairs
 def batch2TrainData(voc, pair_batch, only_source=False):
     # pair_batch.sort(key=lambda x: len(x[0].split(" ")), reverse=True)
+    if only_source:
+        input_batch = [pair_batch]
+        inp, lengths = inputVar(input_batch, voc)
+        return inp, lengths
     pair_batch.sort(key=lambda x: len(x[0]), reverse=True)
     input_batch, output_batch = [], []
     for pair in pair_batch:
@@ -98,19 +102,60 @@ def get_hidden(input_variable, lengths, encoder, args):
 
     return concatenated_hidden.cpu()
 
+# Get one sentence's hidden
 def get_sen_hidden(sen, encoder, voc, args):
-    batch2TrainData(voc, [sen, 0])
+    # 0 for dummy sentence
+    inp, lengths = batch2TrainData(voc, sen, only_source=True)
+    hidden = get_hidden(inp, lengths, encoder, args)
+    hidden = hidden / torch.sqrt(torch.sum(torch.pow(hidden, 2), dim=1).unsqueeze(dim=1))
+
+    return hidden
+
+
+def get_optimal_batches(sen, encoder, hiddens, sen_list, args):
+
+    sen_hidden = get_sen_hidden(sen, encoder, voc, args)
+    sen_hidden = sen_hidden.unsqueeze(0)
+    similarity = torch.mm(sen_hidden.squeeze(0), torch.transpose(hiddens, 0, 1))
+    _, sens_indexes = torch.topk(similarity, args.num_prune)
+    chosen_sens = []
+    sens_indexes = sens_indexes.squeeze(0)
+    for index in sens_indexes:
+        chosen_sens.append(sen_list[index.item()])
+
+    return chosen_sens
+
+# Data source is a pair
+def evaluate_sen(data_source, model, args):
+
+    with torch.no_grad():
+        # data = get_batch(data_source, 0, args, batch_size=batch_size, evaluation=True)
+        data = data_source
+        #if args.cuda:
+        #    data[0].cuda()
+        #    data[1].cuda()
+        # print(type(data), data.shape)
+        data = tensorFromPairEval(data, EOS_Token=args.EOS_id)
+        log_prob = model(data, to_device=True)
+        # Only evaluate last element is important
+        prob = torch.exp(log_prob)[0][0].item()
+        # sys.exit()
+    return prob
+
+
 
 
 if __name__ == '__main__':
 
     permutation = np.random.permutation(len(train_data))
     picked_pairs = []
+    train_pairs = []
 
     for i in range(len(permutation)):
-        if i == args.num_warm_up:
-            break
-        picked_pairs.append(train_data[i])
+        if i < args.num_warm_up:
+            picked_pairs.append(train_data[i])
+        else:
+            train_pairs.append(train_data[i])
 
     n_iteration = len(picked_pairs) // args.batch_size
 
@@ -128,7 +173,7 @@ if __name__ == '__main__':
         # Extract fields from batch
         input_variable, lengths, input_batch, output_batch = training_batch
         if input_sens is None:
-            input_sens= input_batch
+            input_sens = input_batch
             output_sens = output_batch
         else:
             input_sens += input_batch
@@ -145,10 +190,11 @@ if __name__ == '__main__':
     # Reformat the sentences' list
     rearranged_sens = [[input_sens[i], output_sens[i]] for i in range(len(input_sens))]
 
-    normalized_hiddens = input_hiddens / torch.sum(input_hiddens, dim=1).unsqueeze(dim=1)
+    normalized_hiddens = input_hiddens / torch.sqrt(torch.sum(torch.pow(input_hiddens, 2), dim=1).unsqueeze(dim=1))
 
     torch.save(normalized_hiddens, 'heuristic_normalized_sentences_hiddens')
     pickle.dump(rearranged_sens, open('heuristic_sentences', 'wb'))
+    pickle.dump(train_pairs, open('train_remain_pairs', 'wb'))
 
 
 

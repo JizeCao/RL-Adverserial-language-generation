@@ -24,7 +24,13 @@ def warm_up(encoder, decoder, source, ix_to_word, args, SOS_index=1):
     # Get the dimension of the output
     return encoder_output, torch.exp(init_reward.view(-1)), decoder_hidden, source
 
+def load_initialization(args):
+    save_dir = args.save_dir
+    targets = pickle.load(open(os.path.join(save_dir, 'heuristic_sentences'), 'rb'))
+    vocab = pickle.load(open(os.path.join(save_dir, 'whole_data_voc.p'), 'rb'))
+    hiddens = torch.load(os.path.join(save_dir, 'heuristic_normalized_sentences_hiddens'))
 
+    return targets, vocab, hiddens
 
 def logging(s, print_=True, log_=True, args=None):
     if print_:
@@ -39,7 +45,8 @@ def generate_reward(decoder, encoder_output, decoder_hidden, input_word):
     return evaluate_word(decoder, encoder_output, decoder_hidden, input_word)
 
 
-def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, start_index, dis_reward, num_dis, ix_to_word, dis_reward_list, evaluation=False, output_file=None, batch_size=None):
+def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, start_index, dis_reward, num_dis,
+               ix_to_word, dis_reward_list, evaluation=False, output_file=None, batch_size=None):
     if batch_size is None:
         batch_size = args.batch_size
     if output_file is None:
@@ -48,6 +55,13 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
         writing_statu = 'a'
     else:
         writing_statu = 'w'
+    if args.prune:
+        targets, vocab, hiddens = load_initialization(args)
+    else:
+        targets = None
+        vocab = None
+        hiddens = None
+
     sen_iter_list = []
     dis_panalty_list = []
     with open(output_file, writing_statu) as outf:
@@ -66,12 +80,17 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
             gen_cache = {}
             dis_cache = {}
             # Sentence level MCTS
-            gen_pair, dis_reward, num_dis, num_iter_sen, dis_panalty = UCTSearch(init_reward, action_space=len(ix_to_word), gen_model=decoder,
+            gen_pair, dis_reward, num_dis, num_iter_sen, dis_panalty = UCTSearch(init_reward, action_space=len(ix_to_word), decoder=decoder,
                                                                                  dis_model=dis_model, init_hidden=hidden, source=source,
                                                                                  gen_cache = gen_cache, dis_cache=dis_cache, sentence=True,
                                                                                  num_dis=num_dis, dis_reward=dis_reward, encoder_output=encoder_output,
                                                                                  args=args,
-                                                                                 ix_to_word=ix_to_word)
+                                                                                 ix_to_word=ix_to_word,
+                                                                                 pruning=args.prune,
+                                                                                 targets=targets,
+                                                                                 voc=vocab,
+                                                                                 hiddens=hiddens,
+                                                                                 encoder=encoder)
             for i in range(len(gen_pair)):
                 if i == 0:
                     print("Source:", end=' ')
@@ -79,7 +98,10 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
                     print("Answer:", end=' ')
                 for word in gen_pair[i]:
                     #print(ix_to_word[word.item()], end=' ')
-                    outf.write(ix_to_word[word.item()] + ' ')
+                    if type(word) is torch.Tensor:
+                        outf.write(ix_to_word[word.item()] + ' ')
+                    else:
+                        outf.write(ix_to_word[word] + ' ')
                 print()
             sen_iter_list.append(num_iter_sen)
             outf.write('\n')

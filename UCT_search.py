@@ -10,6 +10,7 @@ import copy
 import os
 from search_utils import create_exp_dir, evaluate_word, tensorFromPairEval
 from collections import Counter
+from UCT_initialization import UCT_initialization
 import math
 
 
@@ -50,12 +51,19 @@ class Node(object):
             self.num_visited_children = np.zeros(self.action_space)
 
     # Initialize the node if it's empty, otherwise do nothing
-    def initialize_Node(self, word, action_space, reward, hidden):
+    def initialize_Node(self, word, action_space, reward, hidden, prune=False):
         node = self.children[word]
         # the comming node is not initialized
         if node == 0:
-            self.children[word] = Node(reward, 1, action_space)
-            self.children[word].hidden = hidden
+            if not prune:
+                self.children[word] = Node(reward, 1, action_space)
+                self.children[word].hidden = hidden
+            else:
+                zero_reward = torch.zeros(action_space)
+                if torch.cuda.is_available():
+                    zero_reward = zero_reward.cuda()
+                self.children[word] = Node(zero_reward, 1, action_space)
+                self.children[word].hidden = None
 
 
     # Add the reward to the current node and increase all the possible childern's count by one. 
@@ -69,12 +77,30 @@ class Node(object):
 
 # state: the time step
 # Now the reward is finished
-def UCTSearch(init_reward, action_space, gen_model, encoder_output, init_hidden, dis_model, source, gen_cache, dis_cache, num_dis, dis_reward, args, ix_to_word, sentence=False):
+def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, dis_model, source, gen_cache, dis_cache,
+              num_dis, dis_reward, args, ix_to_word, sentence=False, pruning=False, targets=None, voc=None, hiddens=None,
+              encoder=None):
+
     result = 0
     eos = False
     root = Node(None, 1, action_space)
     root.add_reward_value(init_reward.cpu().numpy())
     root.hidden = init_hidden
+
+    if pruning:
+
+        # Use pruning through the UCT
+        root, return_pair, score = UCT_initialization(root, source, targets, encoder, dis_model, voc, hiddens, args)
+        if return_pair is not None:
+            print(score)
+            for sen in return_pair:
+                for word in sen:
+                    print(ix_to_word[word], end=' ')
+                print()
+            final_result = result
+
+            return return_pair, dis_reward, num_dis, 0, final_result
+
     final_result = 0
     # sys.exit()
     pair = [source, None]
@@ -94,7 +120,7 @@ def UCTSearch(init_reward, action_space, gen_model, encoder_output, init_hidden,
             wordlist.append(word_selected)
             wordtuple = tuple(wordlist)
             # if wordtuple not in gen_cache:
-            #     reward, hidden = evaluate_word(gen_model, encoder_output, word, hidden, args)
+            #     reward, hidden = evaluate_word(decoder, encoder_output, word, hidden, args)
             #     reward = reward.cpu().numpy() * args.reward_panalty
             #     gen_cache[wordtuple] = [copy.deepcopy(reward), copy.deepcopy(hidden)]
             # else:
@@ -104,8 +130,14 @@ def UCTSearch(init_reward, action_space, gen_model, encoder_output, init_hidden,
             word = word.item()
             # Node is not initialized
             if current.children[word] == 0:
-                reward, hidden = evaluate_word(gen_model, encoder_output, word, hidden, args)
+                reward, hidden = evaluate_word(decoder, encoder_output, word, hidden, args)
                 current.initialize_Node(word, action_space, reward, hidden)
+
+            # The node is initialized during pruning
+            elif current.children[word].hidden is None:
+                reward, hidden = evaluate_word(decoder, encoder_output, word, hidden, args)
+                current.children[word].reward += reward
+                current.children[word].hidden = hidden
             else:
                 # The hidden of the children
                 hidden = current.children[word].hidden
@@ -172,6 +204,7 @@ def UCTSearch(init_reward, action_space, gen_model, encoder_output, init_hidden,
 
 # Data source is a pair
 def evaluate_sen(data_source, model, args):
+
     with torch.no_grad():
         # data = get_batch(data_source, 0, args, batch_size=batch_size, evaluation=True)
         data = data_source
@@ -179,7 +212,7 @@ def evaluate_sen(data_source, model, args):
         #    data[0].cuda()
         #    data[1].cuda()
         # print(type(data), data.shape)
-        data = tensorFromPairEval(data, EOS_Token=25001)
+        data = tensorFromPairEval(data, EOS_Token=args.EOS_id)
         log_prob = model(data, to_device=True)
         # Only evaluate last element is important
         prob = torch.exp(log_prob)[0][0].item()

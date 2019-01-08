@@ -103,6 +103,10 @@ parser.add_argument('--frozen_dis', action='store_true',
                     help='freeze the discriminator')
 parser.add_argument('--frozen_gen', action='store_true',
                     help='freeze the generator')
+parser.add_argument('--prune', action='store_false',
+                    help='Initialize the UCT with m sentences')
+parser.add_argument('--num_prune', default=100, type=int,
+                    help='number of sentences to prune the UCT root')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -149,6 +153,7 @@ if __name__ == "__main__":
     encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
     args.EOS_id = voc.word2index['<EOS>']
     args.SOS_id = voc.word2index['<SOS>']
+    args.vocabulary_size = len(voc.index2word)
 
     if args.retrain:
         rl_checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_freq_decay_Reinforce_checkpoint_with_dis_val_loss.pt', 'rb'))
@@ -166,7 +171,8 @@ if __name__ == "__main__":
             embedded_dis = None
     
     else:
-        dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_sen[:20000], neg_valid=neg_valid_sen[:20000], EOS_token=args.EOS_id)
+        dis_val_loss = 0.12
+        #dis_val_loss = evaluateD(dis_model, pos_valid=pos_valid_sen[:20000], neg_valid=neg_valid_sen[:20000], EOS_token=args.EOS_id)
         logging('initial dis_val loss is {:.2f}'.format(dis_val_loss), 'new_dis_val_loss.txt') 
     
 
@@ -204,22 +210,22 @@ if __name__ == "__main__":
         decoder.eval()
         dis_model.eval()
 
-        # Generate sampling data
-        if num_loop % 40 == 1:
-            with open('sample.txt', 'a') as outf:
-                outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
-                outf.write('')
-            # 0 because no need to random initialization
-            sample_file_name = 'sample'
-            if args.frozen_dis:
-                sample_file_name += '_frozen_dis'
-            if args.frozen_gen:
-                sample_file_name += '_frozen_gen'
-            sample_file_name += '.txt'
-            _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
-                                                                                              args, checking_list, 0, dis_reward_sample, num_dis_sample,
-                                                                                              ix_to_word, dis_reward_list_sample, True, sample_file_name,
-                                                                                              batch_size=len(checking_list))
+        # # Generate sampling data
+        # if num_loop % 40 == 1:
+        #     with open('sample.txt', 'a') as outf:
+        #         outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
+        #         outf.write('')
+        #     # 0 because no need to random initialization
+        #     sample_file_name = 'sample'
+        #     if args.frozen_dis:
+        #         sample_file_name += '_frozen_dis'
+        #     if args.frozen_gen:
+        #         sample_file_name += '_frozen_gen'
+        #     sample_file_name += '.txt'
+        #     _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
+        #                                                                                       args, checking_list, 0, dis_reward_sample, num_dis_sample,
+        #                                                                                       ix_to_word, dis_reward_list_sample, True, sample_file_name,
+        #                                                                                       batch_size=len(checking_list), prune=args.prune)
 
 
 

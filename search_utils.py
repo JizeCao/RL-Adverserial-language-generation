@@ -22,7 +22,8 @@ def load_model_dictionary_pairs(args, dis_model=True, only_data=False):
     decoder_learning_ratio = 1.0
     dis_learning_rate = args.dis_lr
     voc = pickle.load(open(os.path.join(args.save_dir, 'Vocabulary'), 'rb'))
-    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    #train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'train_remain_pairs'), 'rb'))
     valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
     neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_train.p'), 'rb'))
     neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_valid.p'), 'rb'))
@@ -71,7 +72,7 @@ def load_model_dictionary_pairs(args, dis_model=True, only_data=False):
             #dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_correct_beam.pt'))
             dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_beam_frquency.pt'))
         else:
-            dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_beam_beam.pt'), map_location=lambda storage, loc:storage)
+            dis_checkpoint = torch.load(os.path.join(model_save_dir, 'disc_params_beam_frquency.pt'), map_location=lambda storage, loc:storage)
         #dis_model = hierEncoder(len(voc.index2word), 500)
         dis_model = hierEncoder_frequency(len(voc.index2word), 500)
         dis_model.load_state_dict(dis_checkpoint['disc'])
