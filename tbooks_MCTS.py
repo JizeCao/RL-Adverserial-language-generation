@@ -103,7 +103,7 @@ parser.add_argument('--frozen_dis', action='store_true',
                     help='freeze the discriminator')
 parser.add_argument('--frozen_gen', action='store_true',
                     help='freeze the generator')
-parser.add_argument('--prune', action='store_false',
+parser.add_argument('--prune', action='store_true',
                     help='Initialize the UCT with m sentences')
 parser.add_argument('--num_prune', default=100, type=int,
                     help='number of sentences to prune the UCT root')
@@ -210,23 +210,26 @@ if __name__ == "__main__":
         decoder.eval()
         dis_model.eval()
 
-        # # Generate sampling data
-        # if num_loop % 40 == 1:
-        #     with open('sample.txt', 'a') as outf:
-        #         outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
-        #         outf.write('')
-        #     # 0 because no need to random initialization
-        #     sample_file_name = 'sample'
-        #     if args.frozen_dis:
-        #         sample_file_name += '_frozen_dis'
-        #     if args.frozen_gen:
-        #         sample_file_name += '_frozen_gen'
-        #     sample_file_name += '.txt'
-        #     _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
-        #                                                                                       args, checking_list, 0, dis_reward_sample, num_dis_sample,
-        #                                                                                       ix_to_word, dis_reward_list_sample, True, sample_file_name,
-        #                                                                                       batch_size=len(checking_list), prune=args.prune)
+        # Generate sampling data
+        if num_loop % 40 == 1:
+            if args.prune:
+                sample_file_name = 'sample_prune.txt'
+            else:
+                sample_file_name = 'sample.txt' 
+            if args.frozen_dis:
+                sample_file_name += '_frozen_dis'
+            if args.frozen_gen:
+                sample_file_name += '_frozen_gen'
+            sample_file_name += '.txt'
 
+            with open(sample_file_name, 'a') as outf:
+                outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
+                outf.write('')
+            # 0 because no need to random initialization
+            _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
+                                                                                              args, checking_list, 0, dis_reward_sample, num_dis_sample,
+                                                                                              ix_to_word, dis_reward_list_sample, True, sample_file_name,
+                                                                                              batch_size=len(checking_list))
 
 
         # Discriminating time!
@@ -250,7 +253,7 @@ if __name__ == "__main__":
                 torch.cuda.manual_seed_all(args.seed)
         # args.save = '{}-{}'.format(args.absolute_save + "_dis", time.strftime("%Y%m%d-%H%M%S"))
         # create_exp_dir(args.save, scripts_to_save=['automatic_search.py', 'model.py'])
-        print(start_index)
+        print('The start index for MCTS training is', start_index)
 
         # Enlarge the batch size for correcting the number of batches
         
