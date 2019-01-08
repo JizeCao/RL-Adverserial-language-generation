@@ -66,7 +66,7 @@ def get_sen_hidden(sen, encoder, voc, args):
     return hidden
 
 
-def get_optimal_batches(sen, encoder, hiddens, sen_list, args):
+def get_optimal_batches(sen, encoder, hiddens, sen_list, voc, args):
 
     sen_hidden = get_sen_hidden(sen, encoder, voc, args)
     sen_hidden = sen_hidden.unsqueeze(0)

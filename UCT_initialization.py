@@ -79,7 +79,7 @@ def UCT_initialization(root, source, targets, encoder, discriminator, voc, hidde
 
     if type(source) is torch.Tensor:
         source = source.tolist()
-    chosen_targets = get_optimal_batches(source, encoder, hiddens, targets, args)
+    chosen_targets = get_optimal_batches(source, encoder, hiddens, targets, voc, args)
     for sen in chosen_targets:
         # Use the last sentence as a tool to prune
         root, early_stopping, score = initialize_path(root, source, sen[1], args.vocabulary_size, discriminator, args)
