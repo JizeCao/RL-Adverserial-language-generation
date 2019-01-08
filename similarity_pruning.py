@@ -20,6 +20,7 @@ def zeroPadding(l, fillvalue):
 # Returns padded input sequence tensor and lengths
 def inputVar(l, voc):
     # indexes_batch = [indexesFromSentence(voc, sentence) for sentence in l]
+    EOS_token = voc.word2index['<EOS>']
     indexes_batch = [sen + [EOS_token] for sen in l]
     lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
     padList = zeroPadding(indexes_batch, fillvalue=voc.word2index['<PAD>'])
