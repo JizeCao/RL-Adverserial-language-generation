@@ -9,11 +9,12 @@ import itertools
 from search_utils import Voc, tensorFromPairEval
 
 
+
 ### Choose sentences
 
 # Do zero padding given a list of either source or target sens
 # Return: a list contains #max_length of lists, each list contain #batch_size elements
-def zeroPadding(l, fillvalue=PAD_token):
+def zeroPadding(l, fillvalue):
     return list(itertools.zip_longest(*l, fillvalue=fillvalue))
 
 # Returns padded input sequence tensor and lengths
@@ -21,7 +22,7 @@ def inputVar(l, voc):
     # indexes_batch = [indexesFromSentence(voc, sentence) for sentence in l]
     indexes_batch = [sen + [EOS_token] for sen in l]
     lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
-    padList = zeroPadding(indexes_batch)
+    padList = zeroPadding(indexes_batch, fillvalue=voc.word2index['<PAD>'])
     padVar = torch.LongTensor(padList)
     return padVar, lengths
 
