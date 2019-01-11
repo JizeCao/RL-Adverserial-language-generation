@@ -13,7 +13,7 @@ from search_utils import create_exp_dir, dis_retrain, Voc, trim_dummy_sen, load_
 from gen_utils import gen_iter_train
 from collections import Counter
 from model import EncoderRNN, LuongAttnDecoderRNN, hierEncoder
-from MCTS_generation import generation
+from MCTS import generate_sens_uct
 
 import math
 
@@ -80,10 +80,14 @@ parser.add_argument('--EOS_id', type=int, default=25001,
                     help="the index of the end of the sentence")
 parser.add_argument('--RL_index', type=int, default=60,
                     help="the index of the RL network")
-parser.add_argument('--batch_size', type=int, default=20000, metavar='N',
+parser.add_argument('--batch_size', type=int, default=20000000, metavar='N',
                     help='number of generated sentences')
-parser.add_argument('--val_batch_size', type=int, default=2000, metavar='N',
+parser.add_argument('--val_batch_size', type=int, default=2000000, metavar='N',
                     help='number of generated valid sentences')
+parser.add_argument('--prune', action='store_true',
+                    help='Initialize the UCT with m sentences')
+parser.add_argument('--num_prune', default=100, type=int,
+                    help='number of sentences to prune the UCT root')
 
 # Discriminator retraining parameters:
 parser.add_argument('--epochs', type=int, default=1,
@@ -178,14 +182,29 @@ if __name__ == "__main__":
     print("Start generating sentences")
     # TODO: Use the num_iter_list for generator's training
     dis_reward_list = []
-    gen_sen_list, dis_reward, num_dis, num_iter_list = generation(encoder, decoder, dis_model, 0, args,
-                                                                  pos_train_sen, 0, dis_reward, num_dis,
-                                                                  ix_to_word, dis_reward_list)
+    # Placeholder
+    num_loop = 0
+
+    gen_sen_list, dis_reward, num_dis, num_iter_list, _, _ = generate_sens_uct(encoder,
+                                                                               decoder,
+                                                                               dis_model,
+                                                                               num_loop, args,
+                                                                               pos_train_sen,
+                                                                               dis_reward,
+                                                                               num_dis,
+                                                                               ix_to_word,
+                                                                               dis_reward_list)
 
     args.batch_size = args.val_batch_size
-    gen_sen_list_val, dis_reward, num_dis, num_iter_list_val = generation(encoder, decoder, dis_model, 0, args,
-                                                                  pos_valid_sen, 0, dis_reward, num_dis,
-                                                                  ix_to_word, dis_reward_list)
+    gen_sen_list_val, dis_reward, num_dis, num_iter_list, _, _ = generate_sens_uct(encoder,
+                                                                               decoder,
+                                                                               dis_model,
+                                                                               num_loop, args,
+                                                                               pos_valid_sen,
+                                                                               dis_reward,
+                                                                               num_dis,
+                                                                               ix_to_word,
+                                                                               dis_reward_list)
     pickle.dump(gen_sen_list, open('Generated_sentences_' + str(args.RL_index), 'wb'))
     pickle.dump(gen_sen_list_val, open('Generated_sentences_valid_' + str(args.RL_index), 'wb'))
 
