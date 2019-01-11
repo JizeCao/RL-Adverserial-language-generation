@@ -56,12 +56,13 @@ class Node(object):
         # the comming node is not initialized
         if node == 0:
             if not prune:
+                reward = reward.cpu().numpy()
                 self.children[word] = Node(reward, 1, action_space)
                 self.children[word].hidden = hidden
             else:
-                zero_reward = torch.zeros(action_space)
-                if torch.cuda.is_available():
-                    zero_reward = zero_reward.cuda()
+                zero_reward = np.zeros(action_space)
+                #if torch.cuda.is_available():
+                #    zero_reward = zero_reward.cuda()
                 self.children[word] = Node(zero_reward, 1, action_space)
                 self.children[word].hidden = None
 
@@ -127,7 +128,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
             #     reward = gen_cache[wordtuple][0]
             #     hidden = gen_cache[wordtuple][1]
 
-            word = word.item()
+            #word = word.item()
             # Node is not initialized
             if current.children[word] == 0:
                 reward, hidden = evaluate_word(decoder, encoder_output, word, hidden, args)
@@ -135,7 +136,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
 
             # The node is initialized during pruning
             elif current.children[word].hidden is None:
-                reward, hidden = evaluate_word(decoder, encoder_output, word, hidden, args)
+                reward, hidden = evaluate_word(decoder, encoder_output, torch.LongTensor(word), hidden, args)
                 current.children[word].reward += reward
                 current.children[word].hidden = hidden
             else:
