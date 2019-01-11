@@ -15,6 +15,7 @@ from collections import Counter
 from model import EncoderRNN, LuongAttnDecoderRNN, hierEncoder
 from MCTS_generation import generation
 from MCTS import generate_sens_uct
+from mixture_sampling import beam_generation
 import math
 
 
@@ -91,7 +92,7 @@ parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
 parser.add_argument('--epochs', type=int, default=1,
                     help='upper epoch limit')
-parser.add_argument('--batch_size', type=int, default=100, metavar='N',
+parser.add_argument('--batch_size', type=int, default=2, metavar='N',
                     help='batch size')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
@@ -107,6 +108,12 @@ parser.add_argument('--prune', action='store_true',
                     help='Initialize the UCT with m sentences')
 parser.add_argument('--num_prune', default=100, type=int,
                     help='number of sentences to prune the UCT root')
+parser.add_argument('--mix', action='store_false',
+                    help='mix generation during training')
+parser.add_argument('--beam_size', type=int, default=8,
+                    help='batch size')
+
+
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -115,7 +122,7 @@ args.device = device
 
 def training_data_permutation(pos_train_sen, start_index, dis_panalty_list=None):
 
-    pos_data = copy.deepcopy(pos_train_sen[start_index: start_index + args.batch_size])
+    pos_data = copy.deepcopy(pos_train_sen[start_index: start_index + len(gen_sen_list)])
     neg_data = gen_sen_list
     labels = np.append(np.zeros(len(pos_data)), np.ones(len(neg_data))).reshape((-1, 1))
     permute = np.random.permutation(len(pos_data) + len(neg_data))
@@ -210,26 +217,26 @@ if __name__ == "__main__":
         decoder.eval()
         dis_model.eval()
 
-        # Generate sampling data
-        if num_loop % 40 == 1:
-            if args.prune:
-                sample_file_name = 'sample_prune.txt'
-            else:
-                sample_file_name = 'sample.txt' 
-            if args.frozen_dis:
-                sample_file_name += '_frozen_dis'
-            if args.frozen_gen:
-                sample_file_name += '_frozen_gen'
-            sample_file_name += '.txt'
-
-            with open(sample_file_name, 'a') as outf:
-                outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
-                outf.write('')
-            # 0 because no need to random initialization
-            _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
-                                                                                              args, checking_list, 0, dis_reward_sample, num_dis_sample,
-                                                                                              ix_to_word, dis_reward_list_sample, True, sample_file_name,
-                                                                                              batch_size=len(checking_list))
+        # # Generate sampling data
+        # if num_loop % 40 == 1:
+        #     if args.prune:
+        #         sample_file_name = 'sample_prune.txt'
+        #     else:
+        #         sample_file_name = 'sample.txt'
+        #     if args.frozen_dis:
+        #         sample_file_name += '_frozen_dis'
+        #     if args.frozen_gen:
+        #         sample_file_name += '_frozen_gen'
+        #     sample_file_name += '.txt'
+        #
+        #     with open(sample_file_name, 'a') as outf:
+        #         outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
+        #         outf.write('')
+        #     # 0 because no need to random initialization
+        #     _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
+        #                                                                                       args, checking_list, 0, dis_reward_sample, num_dis_sample,
+        #                                                                                       ix_to_word, dis_reward_list_sample, True, sample_file_name,
+        #                                                                                       batch_size=len(checking_list))
 
 
         # Discriminating time!
@@ -238,7 +245,7 @@ if __name__ == "__main__":
         gen_sen_list, dis_reward, num_dis, num_iter_list, start_index, dis_panalty_list = generate_sens_uct(encoder, decoder, dis_model,
                                                                                                             num_loop, args, pos_train_sen,
                                                                                                             dis_reward, num_dis,
-                                                                                                            ix_to_word, dis_reward_list)
+                                                                                                            ix_to_word, dis_reward_list, voc=voc)
 
         # Get the positive/negative data and permute it such that its randomized
         data, labels = training_data_permutation(pos_train_sen, start_index)
@@ -291,7 +298,8 @@ if __name__ == "__main__":
                                                                                                                 pos_train_sen,
                                                                                                                 dis_reward, num_dis,
                                                                                                                 ix_to_word,
-                                                                                                                dis_reward_list)
+                                                                                                                dis_reward_list,
+                                                                                                                voc=voc)
 
             # Get the positive/negative data and permute it such that its randomized
             data, labels, dis_panalty = training_data_permutation(pos_train_sen, start_index, dis_panalty_list)

@@ -291,12 +291,21 @@ def evaluate_sen(encoder, decoder, sentence, device, encoder_outputs=None, decod
 # Data source is a pair
 def dis_evaluate_sen(data_source, model, args):
     with torch.no_grad():
-        data = data_source
+
         # print(type(data), data.shape)
+        if type(data_source) is not torch.Tensor:
+            # During directly use
+            if args.cuda:
+                data = [torch.LongTensor(data_source[0]).cuda(), torch.LongTensor(data_source[1]).cuda()]
+            else:
+                data = [torch.LongTensor(data_source[0]), torch.LongTensor(data_source[1])]
+        else:
+            # During MCTS generation
+            data = data_source
         log_prob = model(data, to_device=True)
         # Only evaluate last element is important
         prob = torch.exp(log_prob)[0][0].item()
-        # sys.exit()
+
     return prob
 
 

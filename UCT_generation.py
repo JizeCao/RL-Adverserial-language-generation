@@ -95,6 +95,8 @@ parser.add_argument('--dis_lr', type=float, default=0.001,
                     help='initial learning rate')
 parser.add_argument('--adam', action='store_true',
                     help='Adam optimizer')
+parser.add_argument('--mix', action='store_true',
+                    help='mix generation during training')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
