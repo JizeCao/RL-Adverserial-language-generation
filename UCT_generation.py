@@ -18,7 +18,7 @@ from MCTS import generate_sens_uct
 import math
 
 parser = argparse.ArgumentParser(description='UCT based on the language model')
-parser.add_argument('--save_dir', type=str, default='../data/save',
+parser.add_argument('--save_dir', type=str, default='./data/save',
                     help="directory of generative model")
 parser.add_argument('--mapping', type=str, default='',
                     help="directory of the generative and discriminative mapping")
@@ -48,16 +48,6 @@ parser.add_argument('--threshold', type=int, default=15,
                     help='total number of output words')
 parser.add_argument('--automatic', action='store_false',
                     help='automatic discrimination')
-parser.add_argument('--num_loop', type=int, default=500,
-                    help='number of whole loops processing')
-parser.add_argument('--neg_data', type=str, default='stored_text_200000',
-                    help="Data used to feed the generator")
-parser.add_argument('--unit_test', action='store_true',
-                    help="Do unit testing on test data")
-parser.add_argument('--absolute_save', type=str, default='test',
-                    help='the absolute save path of the models')
-parser.add_argument('--unk_panalty', type=float, default=0.15,
-                    help='the panalty on unk')
 parser.add_argument('--reward_panalty', type=float, default=0.4,
                     help='the panalty on the generator reward')
 # parser.add_argument('--prev_dis_model', type=str, default='best_dis_model_copy_train/',
@@ -80,9 +70,9 @@ parser.add_argument('--EOS_id', type=int, default=25001,
                     help="the index of the end of the sentence")
 parser.add_argument('--RL_index', type=int, default=60,
                     help="the index of the RL network")
-parser.add_argument('--batch_size', type=int, default=20000000, metavar='N',
+parser.add_argument('--batch_size', type=int, default=1000000, metavar='N',
                     help='number of generated sentences')
-parser.add_argument('--val_batch_size', type=int, default=2000000, metavar='N',
+parser.add_argument('--val_batch_size', type=int, default=150000, metavar='N',
                     help='number of generated valid sentences')
 parser.add_argument('--prune', action='store_true',
                     help='Initialize the UCT with m sentences')
@@ -98,7 +88,13 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--nonmono', type=int, default=5,
                     help='random seed')
-parser.add_argument('--pre_train', type='store_true', help='Generate pretrain data')
+parser.add_argument('--pretrain', action='store_true', help='Generate pretrain data')
+parser.add_argument('--gen_lr', type=float, default=0.001,
+                    help='initial learning rate')
+parser.add_argument('--dis_lr', type=float, default=0.001,
+                    help='initial learning rate')
+parser.add_argument('--adam', action='store_true',
+                    help='Adam optimizer')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -115,9 +111,10 @@ def generate_randint_list(args, sentence_list_len):
 # Data are in pairs
 if __name__ == "__main__":
 
-    if args.pretrain_dis:
+    if args.pretrain:
         encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, \
         pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
+
 
     else:
         # Use existing RL checkpoints, check RL_index first
@@ -196,6 +193,10 @@ if __name__ == "__main__":
                                                                                ix_to_word,
                                                                                dis_reward_list)
 
+    if args.pretrain:
+        pickle.dump(gen_sen_list, open('Generated_sentences_' + 'pretrain_UCT', 'wb'))
+    else:
+        pickle.dump(gen_sen_list, open('Generated_sentences_' + str(args.RL_index), 'wb'))
     args.batch_size = args.val_batch_size
     gen_sen_list_val, dis_reward, num_dis, num_iter_list, _, _ = generate_sens_uct(encoder,
                                                                                decoder,
@@ -206,8 +207,11 @@ if __name__ == "__main__":
                                                                                num_dis,
                                                                                ix_to_word,
                                                                                dis_reward_list)
-    pickle.dump(gen_sen_list, open('Generated_sentences_' + str(args.RL_index), 'wb'))
-    pickle.dump(gen_sen_list_val, open('Generated_sentences_valid_' + str(args.RL_index), 'wb'))
+    
+    if args.pretrain:
+        pickle.dump(gen_sen_list_val, open('Generated_sentences_valid_' + 'pretrain_UCT', 'wb'))
+    else: 
+        pickle.dump(gen_sen_list_val, open('Generated_sentences_valid_' + str(args.RL_index), 'wb'))
 
 
 
