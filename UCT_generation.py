@@ -98,21 +98,13 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--nonmono', type=int, default=5,
                     help='random seed')
+parser.add_argument('--pre_train', type='store_true', help='Generate pretrain data')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 args.device = device
 if device == 'cuda:0':
     args.cuda = True
-
-
-
-# def logging(s, print_=True, log_=True):
-#     if print_:
-#         print(s)
-#     if log_:
-#         with open(os.path.join(args.save, 'log.txt'), 'a+') as f_log:
-#             f_log.write(s + '\n')
 
 
 def generate_randint_list(args, sentence_list_len):
@@ -123,39 +115,45 @@ def generate_randint_list(args, sentence_list_len):
 # Data are in pairs
 if __name__ == "__main__":
 
-    hidden_size = 512
-    encoder_n_layers = 3
-    decoder_n_layers = 3
-    dropout = 0.2
-    attn_model = 'dot'
+    if args.pretrain_dis:
+        encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, \
+        pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
 
-    voc = pickle.load(open('../data/save/whole_data_voc.p', 'rb'))
-    if args.cuda:
-        checkpoint = torch.load(open('../data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'))
     else:
-        checkpoint = torch.load(open('../data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'), map_location=lambda storage, loc: storage)
-    encoder_sd = checkpoint['en']
-    decoder_sd = checkpoint['de']
-    embedding_sd = checkpoint['embedding']
-    encoder_optimizer_sd = checkpoint['en_opt']
-    decoder_optimizer_sd = checkpoint['de_opt']
-    voc.__dict__ = checkpoint['voc_dict']
-    pos_train_sen = pickle.load(open('../data/save/small_train_2000000.p', 'rb'))[:args.batch_size]
-    pos_valid_sen = pickle.load(open('../data/save/small_valid_2000000.p', 'rb'))[:args.val_batch_size]
+        # Use existing RL checkpoints, check RL_index first
+        hidden_size = 512
+        encoder_n_layers = 3
+        decoder_n_layers = 3
+        dropout = 0.2
+        attn_model = 'dot'
+
+        voc = pickle.load(open('./data/save/whole_data_voc.p', 'rb'))
+        if args.cuda:
+            checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'))
+        else:
+            checkpoint = torch.load(open('./data/save/' + str(args.RL_index) + '_Reinforce_checkpoint.pt', 'rb'), map_location=lambda storage, loc: storage)
+        encoder_sd = checkpoint['en']
+        decoder_sd = checkpoint['de']
+        embedding_sd = checkpoint['embedding']
+        encoder_optimizer_sd = checkpoint['en_opt']
+        decoder_optimizer_sd = checkpoint['de_opt']
+        voc.__dict__ = checkpoint['voc_dict']
+        pos_train_sen = pickle.load(open('./data/save/train_remain_pairs.p', 'rb'))[:args.batch_size]
+        pos_valid_sen = pickle.load(open('./data/save/small_valid_2000000.p', 'rb'))[:args.val_batch_size]
 
 
-    embedding = nn.Embedding(voc.num_words, hidden_size)
-    embedding.load_state_dict(embedding_sd)
-    embedding.to(args.device)
-    encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
-    decoder = LuongAttnDecoderRNN(attn_model, embedding, hidden_size, voc.num_words, decoder_n_layers, dropout)
-    encoder.load_state_dict(encoder_sd)
-    decoder.load_state_dict(decoder_sd)
-    encoder.to(args.device)
-    decoder.to(args.device)
-    dis_model = hierEncoder(len(voc.index2word), 500)
-    dis_model.load_state_dict(checkpoint['dis'])
-    dis_model.to(args.device)
+        embedding = nn.Embedding(voc.num_words, hidden_size)
+        embedding.load_state_dict(embedding_sd)
+        embedding.to(args.device)
+        encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
+        decoder = LuongAttnDecoderRNN(attn_model, embedding, hidden_size, voc.num_words, decoder_n_layers, dropout)
+        encoder.load_state_dict(encoder_sd)
+        decoder.load_state_dict(decoder_sd)
+        encoder.to(args.device)
+        decoder.to(args.device)
+        dis_model = hierEncoder(len(voc.index2word), 500)
+        dis_model.load_state_dict(checkpoint['dis'])
+        dis_model.to(args.device)
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_id)
     dis_reward = 0
@@ -169,6 +167,9 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
+    args.EOS_id = voc.word2index['<EOS>']
+    args.SOS_id = voc.word2index['<SOS>']
+    args.vocabulary_size = len(voc.index2word)
 
     encoder.eval()
     decoder.eval()
