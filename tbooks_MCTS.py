@@ -15,7 +15,6 @@ from collections import Counter
 from model import EncoderRNN, LuongAttnDecoderRNN, hierEncoder
 from MCTS_generation import generation
 from MCTS import generate_sens_uct
-from mixture_sampling import beam_generation
 import math
 
 
@@ -112,6 +111,8 @@ parser.add_argument('--mix', action='store_false',
                     help='mix generation during training')
 parser.add_argument('--beam_size', type=int, default=8,
                     help='batch size')
+parser.add_argument('--replay', action='store_false',
+                    help='mix generation during training')
 
 
 
@@ -156,6 +157,10 @@ def training_data_permutation(pos_train_sen, start_index, dis_panalty_list=None)
 
 # Data are in pairs
 if __name__ == "__main__":
+
+    if args.replay:
+        replay_list = []
+        replay_dis_list = []
 
     encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
     args.EOS_id = voc.word2index['<EOS>']
@@ -218,25 +223,25 @@ if __name__ == "__main__":
         dis_model.eval()
 
         # # Generate sampling data
-        # if num_loop % 40 == 1:
-        #     if args.prune:
-        #         sample_file_name = 'sample_prune.txt'
-        #     else:
-        #         sample_file_name = 'sample.txt'
-        #     if args.frozen_dis:
-        #         sample_file_name += '_frozen_dis'
-        #     if args.frozen_gen:
-        #         sample_file_name += '_frozen_gen'
-        #     sample_file_name += '.txt'
-        #
-        #     with open(sample_file_name, 'a') as outf:
-        #         outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
-        #         outf.write('')
-        #     # 0 because no need to random initialization
-        #     _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
-        #                                                                                       args, checking_list, 0, dis_reward_sample, num_dis_sample,
-        #                                                                                       ix_to_word, dis_reward_list_sample, True, sample_file_name,
-        #                                                                                       batch_size=len(checking_list))
+        if num_loop % 40 == 1:
+            if args.prune:
+                sample_file_name = 'sample_prune.txt'
+            else:
+                sample_file_name = 'sample.txt'
+            if args.frozen_dis:
+                sample_file_name += '_frozen_dis'
+            if args.frozen_gen:
+                sample_file_name += '_frozen_gen'
+            sample_file_name += '.txt'
+
+            with open(sample_file_name, 'a') as outf:
+                outf.write('| The sampling data after training ' + str(num_loop) + ' loops|')
+                outf.write('')
+            # 0 because no need to random initialization
+            _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
+                                                                                              args, checking_list, 0, dis_reward_sample, num_dis_sample,
+                                                                                              ix_to_word, dis_reward_list_sample, True, sample_file_name,
+                                                                                              batch_size=len(checking_list))
 
 
         # Discriminating time!
@@ -247,8 +252,13 @@ if __name__ == "__main__":
                                                                                                             dis_reward, num_dis,
                                                                                                             ix_to_word, dis_reward_list, voc=voc)
 
+
         # Get the positive/negative data and permute it such that its randomized
-        data, labels = training_data_permutation(pos_train_sen, start_index)
+        data, labels, dis_panalty = training_data_permutation(pos_train_sen, start_index, dis_panalty_list)
+
+        if args.replay:
+            replay_list += data
+            replay_dis_list += dis_panalty
 
         print(num_iter_list)
         print("Start discriminating")
@@ -304,6 +314,10 @@ if __name__ == "__main__":
             # Get the positive/negative data and permute it such that its randomized
             data, labels, dis_panalty = training_data_permutation(pos_train_sen, start_index, dis_panalty_list)
 
+            if args.replay:
+                replay_list += data
+                replay_dis_list += dis_panalty
+
             # Retrain the generator
             print("Start retraining generator")
             
@@ -317,6 +331,13 @@ if __name__ == "__main__":
             for i in range(args.gen_iter):
                 gen_iter_train(voc, data, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, 50, dis_panalty,
                                batch_size=args.batch_size * 2, teacher_forcing_ratio=args.tf_ratio)
+
+        if args.replay:
+            if num_loop % args.replay_iter == 1:
+                dis_model.train()
+                dis_retrain(dis_model, args=args, train_data=replay_list, labels=replay_dis_list,
+                            ix_to_word=ix_to_word, dis_lr=dis_lr)
+
 
         filename = 'freq_decay_Reinforce_checkpoint_with_dis_val_loss'
         if args.frozen_dis:
