@@ -254,9 +254,9 @@ if __name__ == '__main__':
 
     # Load/Assemble voc and pairs
     save_dir = os.path.join("data", "save")
-    voc_dir = os.path.join(save_dir, 'whole_data_voc.p')
-    train_data_dir = os.path.join(save_dir, 'small_train_2000000.p')
-    valid_data_dir = os.path.join(save_dir, 'small_valid_2000000.p')
+    voc_dir = os.path.join(save_dir, 'whole_data_voc_only_t_given_s.p')
+    train_data_dir = os.path.join(save_dir, 'general_train_text.p')
+    valid_data_dir = os.path.join(save_dir, 'test_data_t_given_s.p')
 
 
     voc = pickle.load(open(voc_dir, 'rb'))
@@ -276,7 +276,7 @@ if __name__ == '__main__':
 
     # Load the best model
 
-    loadFilename = './data/save/cb_model/Open_subtitles/3-3_512/best_model_checkpoint_original_setting_no_valid.pt'
+    loadFilename = './data/save/cb_model/Open_subtitles/3-3_512/best_model_checkpoint_SGD_no_valid_t_given_s_half_data.pt'
 
     # If loading on same machine the model was trained on
     if USE_CUDA:
