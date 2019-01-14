@@ -164,7 +164,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
         #print([ix_to_word[word] for word in wordlist])
 
         # Early stopping
-        if result >= 0.5:
+        if result >= 0.5 or rep_count > 30:
             print(result)
             for sen in pair:
                 for word in sen:
@@ -172,9 +172,6 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
                 print()
             final_result = result
             break
-
-        if rep_count > 30:
-            print('Checking')
 
         current = root
         # the implementation of backup
