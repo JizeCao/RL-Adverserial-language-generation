@@ -251,7 +251,7 @@ class hierEncoder_frequency_batchwise(nn.Module):
         self.gru1 = nn.GRU(self.embedding_size, self.embedding_size)
         self.gru2 = nn.GRU(self.embedding_size, 128)
         self.linear1 = nn.Linear(128, 32)
-        self.linear2 = nn.Linear(33, 2)
+        self.linear2 = nn.Linear(32, 2)
         self.baseline = nn.Linear(33, 1)
 
     def count_max_frequency(self, sen):
@@ -259,6 +259,9 @@ class hierEncoder_frequency_batchwise(nn.Module):
         for i in sen:
             counts[i] += 1
         return torch.max(counts).view(1)
+
+    def initHidden(self):
+        return torch.zeros(1, 1, self.embedding_size)
 
     def forward(self, pair=None, sources=None, targets=None, sources_length=None, targets_length=None, targets_order=None, to_device=True, baseline=False):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -297,9 +300,9 @@ class hierEncoder_frequency_batchwise(nn.Module):
             _, hidden = self.gru2(hidden_y, hidden)
             hidden_xy = hidden  # 得到{x，y}编码结果
 
-            max_frequency = self.count_max_frequency(pair[1]).to(device)
+            #max_frequency = self.count_max_frequency(pair[1]).to(device)
             output = F.relu(self.linear1(hidden_xy.squeeze()))
-            output = torch.cat((output, max_frequency), dim=0)
+            #output = torch.cat((output, max_frequency), dim=0)
             output = F.relu(self.linear2(output)).view(1, -1)
             output = F.log_softmax(output, dim=1)  ## 注意此处的输出为 log_softmax
 
@@ -322,13 +325,13 @@ class hierEncoder_frequency_batchwise(nn.Module):
         # Change the hidden state to correct order
         hidden_targets = hidden_targets[:, targets_order, :]
         # Sentence level GRU, Check whether the dimension is correct!
-        _, hidden = self.gru2(hidden_sources, None)
+        _, hidden = self.gru2(hidden_sources)
         _, hidden = self.gru2(hidden_targets, hidden)
 
 
-        max_frequency = torch.Tensor([self.count_max_frequency(targets[:, i]) for i in range(len(targets[0]))]).unsqueeze(dim=1).to(device)
+        #max_frequency = torch.Tensor([self.count_max_frequency(targets[:, i]) for i in range(len(targets[0]))]).unsqueeze(dim=1).to(device)
         output = F.relu(self.linear1(hidden.squeeze()))
-        output = torch.cat((output, max_frequency), dim=1)
+        #output = torch.cat((output, max_frequency), dim=1)
 
         output_2class = F.relu(self.linear2(output))
         output_2class = F.log_softmax(output_2class, dim=1)  ## 注意此处的输出为 log_softmax
