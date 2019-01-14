@@ -80,11 +80,17 @@ def load_data(args):
     #neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_train.p'), 'rb'))
     #neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
 
+    #voc = pickle.load(open(os.path.join(args.save_dir, 'whole_data_voc.p'), 'rb'))
+    #train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    #valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
+    #neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_' + str(args.RL_index)), 'rb'))
+    #neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_valid_'+ str(args.RL_index)), 'rb'))
+    
     voc = pickle.load(open(os.path.join(args.save_dir, 'whole_data_voc.p'), 'rb'))
-    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'train_remain_pairs'), 'rb'))
     valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
-    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_' + str(args.RL_index)), 'rb'))
-    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_valid_'+ str(args.RL_index)), 'rb'))
+    neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_pretrain_UCT'), 'rb'))
+    neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_sentences_valid_pretrain_UCT'), 'rb'))
     return voc, train_pos_pairs[:len(neg_train_pairs)], valid_pos_pairs[:len(neg_valid_pairs)], neg_train_pairs, neg_valid_pairs
 
 if __name__ == '__main__':
@@ -98,10 +104,16 @@ if __name__ == '__main__':
                         help='retrain from an existing checkpoint')
     parser.add_argument('--seed', type=int, default=1111,
                         help='random seed')
+    parser.add_argument('--pretrain_UCT', action='store_true',
+                        help='pretrain using UCT pairs')
+    parser.add_argument('--pretrain_beam', action='store_true',
+                        help='pretrain using beam search generated sentences')
+    parser.add_argument('--dis_lr', type=float, default=0.001, 
+                        help='dis_lr')
+
 
     args = parser.parse_args()
     args.gen_lr = 0
-    args.dis_lr = 0.001
     args.cuda = True if torch.cuda.is_available() else False
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -115,14 +127,24 @@ if __name__ == '__main__':
     SOS_token = vocab.word2index['<SOS>']  # Start-of-sentence token
     EOS_token = vocab.word2index['<EOS>']  # End-of-sentence token
 
-    log_name = 'AdverSuc_' + str(args.RL_index) + '_.txt'
+    if args.pretrain_UCT:
+        log_name = 'AdverSuc_' + 'pretrain_UCT' + '_.txt'
+    elif args.pretrain_beam:
+        log_name = 'AdverSuc_' + 'pretrain_beam' + '_.txt'
+    else:
+        log_name = 'AdverSuc_' + str(args.RL_index) + '_.txt'
 
     counter = 0
 
     embedding_size = 500
 
     Discriminator = hierEncoder_frequency_batchwise(len(vocab.index2word), 500)
-    save_point_name = 'AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt'
+    if args.pretrain_UCT:
+        save_point_name = 'AdverSuc_checkpoint_' + 'pretrain_UCT' + '_.pt'
+    elif args.pretrain_beam:
+        save_point_name = 'AdverSuc_checkpoint_' + 'pretrain_beam' + '_.pt'
+    else:
+        save_point_name = 'AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt'
     if args.retrain:
         if args.cuda:
             cp = torch.load('AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt')
@@ -142,7 +164,7 @@ if __name__ == '__main__':
     Discriminator.to(device)
     for i in range(n_iterations):
         try:
-            pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=128)
+            pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=512)
             if (i + 1) % 500 == 0:
                 print('Start validation check')
                 current_val_loss, curr_AdverSuc = evaluateD(Discriminator, pos_valid[:len(neg_valid)], neg_valid, EOS_token, vocab,
@@ -159,5 +181,8 @@ if __name__ == '__main__':
                     },  save_point_name)
 
         except KeyboardInterrupt:
-            logging('The final AdverSuc for the RL_checkpoint {} is {:.2f}'.format(args.RL_index, AdverSuc), log_name)
+            if args.pretrain_UCT or args.pretrain_beam:
+                logging('The final AdverSuc for the pretrain model is {:.2f}'.format(AdverSuc), log_name)
+            else:
+                logging('The final AdverSuc for the RL_checkpoint {} is {:.2f}'.format(args.RL_index, AdverSuc), log_name)
             exit()
