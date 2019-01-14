@@ -108,8 +108,11 @@ if __name__ == '__main__':
                         help='pretrain using UCT pairs')
     parser.add_argument('--pretrain_beam', action='store_true',
                         help='pretrain using beam search generated sentences')
-    parser.add_argument('--dis_lr', type=float, default=0.001, 
+    parser.add_argument('--dis_lr', type=float, default=0.0001,
                         help='dis_lr')
+    parser.add_argument('--batch_size', type=int, default=256,
+                        help='batch size')
+
 
 
     args = parser.parse_args()
@@ -164,7 +167,7 @@ if __name__ == '__main__':
     Discriminator.to(device)
     for i in range(n_iterations):
         try:
-            pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=512)
+            pretrainD(Discriminator, pos_train, neg_train, EOS_token, vocab, batch_size=args.batch_size)
             if (i + 1) % 500 == 0:
                 print('Start validation check')
                 current_val_loss, curr_AdverSuc = evaluateD(Discriminator, pos_valid[:len(neg_valid)], neg_valid, EOS_token, vocab,
