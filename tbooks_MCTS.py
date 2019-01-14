@@ -91,7 +91,7 @@ parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
 parser.add_argument('--epochs', type=int, default=1,
                     help='upper epoch limit')
-parser.add_argument('--batch_size', type=int, default=2, metavar='N',
+parser.add_argument('--batch_size', type=int, default=100, metavar='N',
                     help='batch size')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
@@ -107,12 +107,16 @@ parser.add_argument('--prune', action='store_true',
                     help='Initialize the UCT with m sentences')
 parser.add_argument('--num_prune', default=100, type=int,
                     help='number of sentences to prune the UCT root')
-parser.add_argument('--mix', action='store_false',
+parser.add_argument('--mix', action='store_true',
                     help='mix generation during training')
 parser.add_argument('--beam_size', type=int, default=8,
                     help='batch size')
 parser.add_argument('--replay', action='store_false',
                     help='mix generation during training')
+parser.add_argument('--replay_lag', type=int, default=10,
+                    help='the lag between each replay training')
+parser.add_argument('--replay_iter', type=int, default=8,
+                    help='number of iterations per replay')
 
 
 
@@ -159,8 +163,9 @@ def training_data_permutation(pos_train_sen, start_index, dis_panalty_list=None)
 if __name__ == "__main__":
 
     if args.replay:
-        replay_list = []
-        replay_dis_list = []
+        replay_data = []
+        replay_dis_panalty = []
+        replay_label = []
 
     encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
     args.EOS_id = voc.word2index['<EOS>']
@@ -257,8 +262,9 @@ if __name__ == "__main__":
         data, labels, dis_panalty = training_data_permutation(pos_train_sen, start_index, dis_panalty_list)
 
         if args.replay:
-            replay_list += data
-            replay_dis_list += dis_panalty
+            replay_data += data
+            replay_dis_panalty += dis_panalty
+            replay_label += labels
 
         print(num_iter_list)
         print("Start discriminating")
@@ -315,8 +321,9 @@ if __name__ == "__main__":
             data, labels, dis_panalty = training_data_permutation(pos_train_sen, start_index, dis_panalty_list)
 
             if args.replay:
-                replay_list += data
-                replay_dis_list += dis_panalty
+                replay_data += data
+                replay_dis_panalty += dis_panalty
+                replay_label += labels
 
             # Retrain the generator
             print("Start retraining generator")
@@ -328,15 +335,30 @@ if __name__ == "__main__":
                     torch.cuda.manual_seed_all(args.seed)
 
             # At any point you can hit Ctrl + C to break out of training early.
-            for i in range(args.gen_iter):
-                gen_iter_train(voc, data, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, 50, dis_panalty,
-                               batch_size=args.batch_size * 2, teacher_forcing_ratio=args.tf_ratio)
+
+            gen_iter_train(voc, pairs=data, encoder=encoder, decoder=decoder, encoder_optimizer=encoder_optimizer,
+                           decoder_optimizer=decoder_optimizer, embedding=embedding, clip=50,
+                           discriminator_panalty=dis_panalty,
+                           batch_size=args.batch_size * 2,
+                           teacher_forcing_ratio=args.tf_ratio,
+                           n_iteration=args.gen_iter)
 
         if args.replay:
-            if num_loop % args.replay_iter == 1:
-                dis_model.train()
-                dis_retrain(dis_model, args=args, train_data=replay_list, labels=replay_dis_list,
-                            ix_to_word=ix_to_word, dis_lr=dis_lr)
+            if num_loop % args.replay_lag == 1:
+                # Retrain the generator and discriminatro using replay
+                for _ in range(args.replay_iter):
+                    dis_model.train()
+                    dis_retrain(dis_model, args=args, train_data=replay_data, labels=replay_label,
+                                ix_to_word=ix_to_word, dis_lr=dis_lr)
+
+                gen_iter_train(voc, pairs=data, encoder=encoder, decoder=decoder, encoder_optimizer=encoder_optimizer,
+                               decoder_optimizer=decoder_optimizer, embedding=embedding, clip=50,
+                               discriminator_panalty=dis_panalty,
+                               batch_size=args.batch_size * 2,
+                               teacher_forcing_ratio=args.tf_ratio,
+                               n_iteration=args.replay_iter)
+
+
 
 
         filename = 'freq_decay_Reinforce_checkpoint_with_dis_val_loss'

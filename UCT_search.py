@@ -23,7 +23,7 @@ class Node(object):
         self.next = None
         self.children = Counter()
         self.num_visit = num_visit
-        self.num_visited_children = np.zeros(action_space)
+        self.num_visited_children = np.ones(action_space)
         self.hidden = None
         '''
         if self.num_visit != 0:
@@ -44,11 +44,14 @@ class Node(object):
     # Add 1 to the number of all visited children because of the prior dist
     # If the node is not initialized, intialized it to be zero
     def add_num_value(self):
-        # self.num_visit = self.num_visit + 1
+        self.num_visit = self.num_visit + 1
+        # Only use discriminator
         if self.num_visited_children is not None:
-            self.num_visited_children = self.num_visited_children + 1
+            #self.num_visited_children = self.num_visited_children + 1
+            pass
         else:
-            self.num_visited_children = np.zeros(self.action_space)
+            # Given the heuristic, initialize the num_visited_children with all ones
+            self.num_visited_children = np.ones(self.action_space)
 
     # Initialize the node if it's empty, otherwise do nothing
     def initialize_Node(self, word, action_space, reward, hidden, prune=False):
@@ -71,7 +74,7 @@ class Node(object):
     # Then select the word based on the UCT policy
     def select(self, args):
 
-        self.add_num_value()
+        #self.add_num_value()
         selected_word = np.argmax(self.reward / self.num_visited_children + args.exp_cont * np.sqrt(2 * np.log(self.num_visit) /
                                                                                                         self.num_visited_children))
         return selected_word
@@ -112,7 +115,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
         depth = 0
         current = root
         # Get a deep copy of the hidden state so that the initial one can be reused
-        hidden = copy.deepcopy(init_hidden)
+        #hidden = copy.deepcopy(init_hidden)
         # the implementation of treePolicy
         while depth < args.max_seq_len and not eos:
 
@@ -120,34 +123,24 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
             word = torch.LongTensor([word_selected])
             wordlist.append(word_selected)
             wordtuple = tuple(wordlist)
-            # if wordtuple not in gen_cache:
-            #     reward, hidden = evaluate_word(decoder, encoder_output, word, hidden, args)
-            #     reward = reward.cpu().numpy() * args.reward_panalty
-            #     gen_cache[wordtuple] = [copy.deepcopy(reward), copy.deepcopy(hidden)]
-            # else:
-            #     reward = gen_cache[wordtuple][0]
-            #     hidden = gen_cache[wordtuple][1]
 
-            #word = word.item()
             # Node is not initialized
             if current.children[word] == 0:
-                reward, hidden = evaluate_word(decoder, encoder_output, word, hidden, args)
+                # Use the current.hidden rather than hidden !
+                reward, hidden = evaluate_word(decoder, encoder_output, word, current.hidden, args)
                 current.initialize_Node(word, action_space, reward, hidden)
 
-            # The node is initialized during pruning
-            elif current.children[word].hidden is None:
-                reward, hidden = evaluate_word(decoder, encoder_output, torch.LongTensor(word), hidden, args)
-                current.children[word].reward += reward
-                current.children[word].hidden = hidden
-            else:
-                # The hidden of the children
-                hidden = current.children[word].hidden
+            # # The node is initialized during pruning
+            # elif current.children[word].hidden is None:
+            #     reward, hidden = evaluate_word(decoder, encoder_output, word, current.hidden, args)
+            #     current.children[word].reward += reward
+            #     current.children[word].hidden = hidden
 
             # store the trace of the selected actions
             current.next = current.children[word]
-            current.next.num_visit = current.num_visited_children[word]
+
             # Add 1 to the #visit of the coming evaluated node after having assigned
-            # the value because of the backup
+            # the value because of the backup will add the value to that node's constant
             current.num_visited_children[word] = current.num_visited_children[word] + 1
             # if it has been initialized, do nothing; otherwise creates a new node
             current = current.next
@@ -171,7 +164,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
         #print([ix_to_word[word] for word in wordlist])
 
         # Early stopping
-        if result >= 0.5 or rep_count == 15:
+        if result >= 0.5:
             print(result)
             for sen in pair:
                 for word in sen:
@@ -179,6 +172,10 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
                 print()
             final_result = result
             break
+
+        if rep_count > 30:
+            print('Checking')
+
         current = root
         # the implementation of backup
         # Following the trace of the front node, add the discriminator's reward to the
@@ -188,7 +185,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
 
         while current.next is not None:
             #print('check update')
-            current.reward[wordlist[depth].item()] += result
+            current.reward[wordlist[depth]] += result
             # Increase the number of visit during the backup rather than tree policy
             current.num_visit += 1
             current = current.next
