@@ -118,7 +118,7 @@ class Voc:
             self.addWord(word)
 
 
-def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.001, batch_size=128, clip=5.0, to_device=True):
+def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.001, batch_size=128, clip=2.5, to_device=True):
 
     modelD.train()
     # prepare data
@@ -166,7 +166,6 @@ def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.0
 
     # BPTT & params updating
     loss.backward()
-
     discOptimizer.step()
 
     print("Time consumed: {} Batch loss: {:.2f}, Misclassification rate {:.2f} ".format((time.time()-start_time),
