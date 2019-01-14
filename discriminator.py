@@ -11,13 +11,6 @@ from model import hierEncoder_frequency_batchwise
 import argparse
 import itertools
 
-parser = argparse.ArgumentParser(description='UCT based on the language model')
-parser.add_argument('--save_dir', type=str, default='./data/save',
-                    help='directory of the save place')
-parser.add_argument('--retrain', action='store_true', 
-                    help='retrain from an existing checkpoint')
-parser.add_argument('--seed', type=int, default=1111,
-                    help='random seed')
 
 # Do zero padding given a list of either source or target sens
 # Return: a list contains #max_length of lists, each list contain #batch_size elements
@@ -125,7 +118,7 @@ class Voc:
             self.addWord(word)
 
 
-def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.001, batch_size=128, to_device=True):
+def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.001, batch_size=128, clip=5.0, to_device=True):
 
     modelD.train()
     # prepare data
@@ -144,6 +137,7 @@ def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.0
 
     # define optimizer & criterion
     discOptimizer = optim.SGD(modelD.parameters(), lr=learning_rate, momentum=0.8)
+    # TODO check whether the sum of reduce result is the same
     criterion = nn.NLLLoss()
     discOptimizer.zero_grad()
     # some predefined variable
@@ -168,16 +162,26 @@ def pretrainD(modelD, TrainSet, GenSet, EOS_token, vocabulary, learning_rate=0.0
 
     loss = criterion(output, labels)
 
+    _ = torch.nn.utils.clip_grad_norm_(modelD.parameters(), clip)
 
     # BPTT & params updating
     loss.backward()
+
     discOptimizer.step()
 
     print("Time consumed: {} Batch loss: {:.2f}, Misclassification rate {:.2f} ".format((time.time()-start_time),
-                                                          loss.item(), misclassification / batch_size))
+            loss.item(), misclassification / batch_size))
 
 
 def evaluateD(modelD, pos_valid, neg_valid, EOS_token, vocab, log_name):
+    parser = argparse.ArgumentParser(description='UCT based on the language model')
+    parser.add_argument('--save_dir', type=str, default='./data/save',
+                        help='directory of the save place')
+    parser.add_argument('--retrain', action='store_true',
+                        help='retrain from an existing checkpoint')
+    parser.add_argument('--seed', type=int, default=1111,
+                        help='random seed')
+
     # prepare data
     batch_size = 512
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -247,8 +251,8 @@ def load_data(args):
     #neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_processed_valid.p'), 'rb'))
 
     voc = pickle.load(open(os.path.join(args.save_dir, 'whole_data_voc.p'), 'rb'))
-    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_sen_2000000.p'), 'rb'))
-    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_sen_2000000.p'), 'rb'))
+    train_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_train_2000000.p'), 'rb'))
+    valid_pos_pairs = pickle.load(open(os.path.join(args.save_dir, 'small_valid_2000000.p'), 'rb'))
     neg_train_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_train.p'), 'rb'))
     neg_valid_pairs = pickle.load(open(os.path.join(args.save_dir, 'Generated_data_beam_search_valid.p'), 'rb'))
 
@@ -260,7 +264,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     args.gen_lr = 0
-    args.dis_lr = 0.001
+    args.dis_lr = 0.0001
     args.cuda = True if torch.cuda.is_available() else False
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     #np.random.seed(args.seed)
