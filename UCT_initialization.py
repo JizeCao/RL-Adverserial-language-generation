@@ -75,35 +75,43 @@ class Node(object):
 
 # Manually shaping the UCT reward for now, may use generator to do prune first
 # Targets and source require to add EOS
-def UCT_initialization(root, source, targets, encoder, discriminator, voc, hiddens, args):
+def UCT_initialization(root, source, targets, encoder, discriminator, voc, hiddens, args, ensemble=None):
 
     if type(source) is torch.Tensor:
         source = source.tolist()
     chosen_targets = get_optimal_batches(source, encoder, hiddens, targets, voc, args)
     for sen in chosen_targets:
         # Use the last sentence as a tool to prune
-        root, early_stopping, score = initialize_path(root, source, sen[1], args.vocabulary_size, discriminator, args)
+        root, early_stopping, score = initialize_path(root, source, sen[1], args.vocabulary_size, discriminator, args,
+                                                      ensemble=ensemble)
         if early_stopping:
             return root, [source, sen[1]], score
 
     return root, None, None
 
 # Data source is a pair
-def evaluate_sen(data_source, model, args):
+def evaluate_sen(data_source, model, args, ensemble=None):
 
     with torch.no_grad():
-        # data = get_batch(data_source, 0, args, batch_size=batch_size, evaluation=True)
+
         data = data_source
 
         data = tensorFromPairEval(data, EOS_Token=args.EOS_id)
+
         log_prob = model(data, to_device=True)
         # Only evaluate last element is important
         prob = torch.exp(log_prob)[0][0].item()
-        # sys.exit()
+
+        if args.ensemble:
+            log_prob_ensemble = ensemble(data, to_device=True)
+            prob_ensemble = torch.exp(log_prob_ensemble)[0][0].item()
+
+            prob = min(prob, prob_ensemble)
+
     return prob
 
 
-def initialize_path(root, source, target, action_space, dis_model, args):
+def initialize_path(root, source, target, action_space, dis_model, args, ensemble=None):
     current = root
     depth = 0
 
@@ -120,7 +128,7 @@ def initialize_path(root, source, target, action_space, dis_model, args):
         current = current.next
         depth = depth + 1
 
-    result = evaluate_sen([source, target], dis_model, args=args)
+    result = evaluate_sen([source, target], dis_model, args=args, ensemble=ensemble)
     depth = 0
 
     if result > 0.5:

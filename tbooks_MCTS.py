@@ -12,7 +12,7 @@ import os
 from search_utils import create_exp_dir, dis_retrain, Voc, trim_dummy_sen, load_model_dictionary_pairs, dis_evaluate_sen, logging, evaluateD
 from gen_utils import gen_iter_train
 from collections import Counter
-from model import EncoderRNN, LuongAttnDecoderRNN, hierEncoder
+from model import EncoderRNN, LuongAttnDecoderRNN, hierEncoder, hierEncoder_frequency_batchwise
 from MCTS_generation import generation
 from MCTS import generate_sens_uct
 import math
@@ -119,6 +119,10 @@ parser.add_argument('--replay_iter', type=int, default=8,
                     help='number of iterations per replay')
 parser.add_argument('--early_stopping', type=int, default=300,
                     help='maximum number of iterations for UCT')
+parser.add_argument('--ensemble', action='store_true',
+                    help='use ensembling')
+parser.add_argument('--ensemble_directory', type=str, default='AdverSuc_checkpoint_pretrain_UCT_.pt')
+parser.add_argument('--print', action='store_true', help='Print the UCT process')
 
 
 
@@ -169,7 +173,24 @@ if __name__ == "__main__":
         replay_dis_panalty = []
         replay_label = []
 
-    encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
+    encoder, decoder, dis_model, encoder_optimizer, decoder_optimizer, dis_model_optimizer, voc, pos_train_sen, \
+    pos_valid_sen, neg_train_sen, neg_valid_sen, embedding = load_model_dictionary_pairs(args)
+
+    if args.ensemble:
+
+        ensemble_dis = hierEncoder_frequency_batchwise(len(voc.index2word), 500)
+        if args.cuda:
+            ensemble_state_dict = torch.load(os.path.join(args.save_dir, args.ensemble_directory))['disc']
+            ensemble_dis.cuda()
+            ensemble_dis.load_state_dict(ensemble_state_dict, strict=False)
+
+        else:
+            ensemble_state_dict = torch.load(os.path.join(args.save_dir, args.ensemble_directory), map_location=lambda storage, loc: storage)
+            ensemble_dis.load_state_dict(ensemble_state_dict, strict=False)
+    else:
+        # Don't use ensembles
+        ensemble_dis = None
+
     args.EOS_id = voc.word2index['<EOS>']
     args.SOS_id = voc.word2index['<SOS>']
     args.vocabulary_size = len(voc.index2word)
@@ -184,10 +205,10 @@ if __name__ == "__main__":
             decoder.cuda()
             dis_model.cuda()
         dis_val_loss = rl_checkpoint['dis_val_loss']
-        if args.embedding:
-            embedded_dis = torch.load(open('AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt', 'rb'))
-        else:
-            embedded_dis = None
+        # if args.embedding:
+        #     embedded_dis = torch.load(open('AdverSuc_checkpoint_' + str(args.RL_index) + '_.pt', 'rb'))
+        # else:
+        #     embedded_dis =
     
     else:
         dis_val_loss = 0.12
@@ -248,7 +269,7 @@ if __name__ == "__main__":
             _, dis_reward_sample, num_dis_sample, useless_list, dis_panalty_list = generation(encoder, decoder, dis_model, num_loop,
                                                                                               args, checking_list, 0, dis_reward_sample, num_dis_sample,
                                                                                               ix_to_word, dis_reward_list_sample, True, sample_file_name,
-                                                                                              batch_size=len(checking_list))
+                                                                                              batch_size=len(checking_list), ensemble=ensemble_dis)
 
 
         # Discriminating time!
@@ -257,7 +278,8 @@ if __name__ == "__main__":
         gen_sen_list, dis_reward, num_dis, num_iter_list, start_index, dis_panalty_list = generate_sens_uct(encoder, decoder, dis_model,
                                                                                                             num_loop, args, pos_train_sen,
                                                                                                             dis_reward, num_dis,
-                                                                                                            ix_to_word, dis_reward_list, voc=voc)
+                                                                                                            ix_to_word, dis_reward_list, voc=voc,
+                                                                                                            ensemble=ensemble_dis)
 
 
         # Get the positive/negative data and permute it such that its randomized
@@ -317,7 +339,8 @@ if __name__ == "__main__":
                                                                                                                 dis_reward, num_dis,
                                                                                                                 ix_to_word,
                                                                                                                 dis_reward_list,
-                                                                                                                voc=voc)
+                                                                                                                voc=voc,
+                                                                                                                ensemble=ensemble_dis)
 
             # Get the positive/negative data and permute it such that its randomized
             data, labels, dis_panalty = training_data_permutation(pos_train_sen, start_index, dis_panalty_list)

@@ -13,6 +13,13 @@ from collections import Counter
 from UCT_initialization import UCT_initialization
 import math
 
+def print_sen_score(pair, score, ix_to_word):
+    print(score)
+    for sen in pair:
+        for word in sen:
+            print(ix_to_word[word], end=' ')
+        print()
+
 
 class Node(object):
     # Construct the node with the given initial reward(provided by generator) and the action space
@@ -83,7 +90,7 @@ class Node(object):
 # Now the reward is finished
 def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, dis_model, source, gen_cache, dis_cache,
               num_dis, dis_reward, args, ix_to_word, sentence=False, pruning=False, targets=None, voc=None, hiddens=None,
-              encoder=None):
+              encoder=None, ensemble=None):
 
     result = 0
     eos = False
@@ -94,13 +101,15 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
     if pruning:
 
         # Use pruning through the UCT
-        root, return_pair, score = UCT_initialization(root, source, targets, encoder, dis_model, voc, hiddens, args)
+        root, return_pair, score = UCT_initialization(root, source, targets, encoder, dis_model, voc, hiddens, args,
+                                                      ensemble=ensemble)
         if return_pair is not None:
-            print(score)
-            for sen in return_pair:
-                for word in sen:
-                    print(ix_to_word[word], end=' ')
-                print()
+            if args.print:
+                print(score)
+                for sen in return_pair:
+                    for word in sen:
+                        print(ix_to_word[word], end=' ')
+                    print()
             final_result = result
 
             return return_pair, dis_reward, num_dis, 0, final_result
@@ -132,11 +141,11 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
                 reward, hidden = evaluate_word(decoder, encoder_output, word, current.hidden, args)
                 current.initialize_Node(word, action_space, reward, hidden)
 
-            # # The node is initialized during pruning
-            # elif current.children[word].hidden is None:
-            #     reward, hidden = evaluate_word(decoder, encoder_output, word, current.hidden, args)
-            #     current.children[word].reward += reward
-            #     current.children[word].hidden = hidden
+            # The node is initialized during pruning
+            elif current.children[word].hidden is None:
+                reward, hidden = evaluate_word(decoder, encoder_output, word, current.hidden, args)
+                current.children[word].reward += reward
+                current.children[word].hidden = hidden
 
             # store the trace of the selected actions
             current.next = current.children[word]
@@ -155,7 +164,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
         # from the discriminator
         if wordtuple not in dis_cache:
             pair[1] = torch.LongTensor(wordlist)
-            result = evaluate_sen(pair, dis_model, args)
+            result = evaluate_sen(pair, dis_model, args, ensemble)
             dis_cache[wordtuple] = copy.deepcopy(result)
             rep_count = 0
         else:
@@ -172,22 +181,24 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
         # Early stopping
         if result >= 0.5 or rep_count > 30:
             best_pair = pair
-            print(result)
-            for sen in pair:
-                for word in sen:
-                    print(ix_to_word[word.item()], end=' ')
-                print()
+            if args.print:
+                print(result)
+                for sen in pair:
+                    for word in sen:
+                        print(ix_to_word[word.item()], end=' ')
+                    print()
             final_result = result
             break
         
         # Early stopping with time threshold
         if i == args.early_stopping:
             final_result = best_result
-            
-            for sen in best_pair:
-                for word in sen:
-                    print(ix_to_word[word.item()], end=' ')
-                print()
+
+            if args.print:
+                for sen in best_pair:
+                    for word in sen:
+                        print(ix_to_word[word.item()], end=' ')
+                    print()
             break
 
         current = root
@@ -215,19 +226,23 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
 
 
 # Data source is a pair
-def evaluate_sen(data_source, model, args):
+def evaluate_sen(data_source, model, args, ensemble=None):
 
     with torch.no_grad():
-        # data = get_batch(data_source, 0, args, batch_size=batch_size, evaluation=True)
+
         data = data_source
-        #if args.cuda:
-        #    data[0].cuda()
-        #    data[1].cuda()
-        # print(type(data), data.shape)
+
         data = tensorFromPairEval(data, EOS_Token=args.EOS_id)
+
         log_prob = model(data, to_device=True)
         # Only evaluate last element is important
         prob = torch.exp(log_prob)[0][0].item()
-        # sys.exit()
+
+        if args.ensemble:
+            log_prob_ensemble = ensemble(data, to_device=True)
+            prob_ensemble = torch.exp(log_prob_ensemble)[0][0].item()
+
+            prob = min(prob, prob_ensemble)
+
     return prob
 

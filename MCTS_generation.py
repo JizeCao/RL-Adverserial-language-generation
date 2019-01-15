@@ -12,6 +12,7 @@ from search_utils import evaluate_sen, create_exp_dir, evaluate_word, tensorFrom
 from collections import Counter
 import math
 from UCT_search import UCTSearch
+from tqdm import tqdm
 
 
 
@@ -46,7 +47,7 @@ def generate_reward(decoder, encoder_output, decoder_hidden, input_word):
 
 
 def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, start_index, dis_reward, num_dis,
-               ix_to_word, dis_reward_list, evaluation=False, output_file=None, batch_size=None):
+               ix_to_word, dis_reward_list, evaluation=False, output_file=None, batch_size=None, ensemble=None):
     if batch_size is None:
         batch_size = args.batch_size
     if output_file is None:
@@ -69,7 +70,7 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
         start_time = time.time()
         gen_sen_pairs = []
         # Warmup the generator
-        for i in range(batch_size):
+        for i in tqdm(range(batch_size)):
             if count >= batch_size:
                 break
             source = warm_up_words_list[start_index + i][0]
@@ -90,28 +91,32 @@ def generation(encoder, decoder, dis_model, num_loop, args, warm_up_words_list, 
                                                                                  targets=targets,
                                                                                  voc=vocab,
                                                                                  hiddens=hiddens,
-                                                                                 encoder=encoder)
+                                                                                 encoder=encoder,
+                                                                                 ensemble=ensemble)
             for i in range(len(gen_pair)):
-                if i == 0:
-                    print("Source:", end=' ')
-                else:
-                    print("Answer:", end=' ')
+                if args.print:
+                    if i == 0:
+                        print("Source:", end=' ')
+                    else:
+                        print("Answer:", end=' ')
+                    print()
                 for word in gen_pair[i]:
                     #print(ix_to_word[word.item()], end=' ')
                     if type(word) is torch.Tensor:
                         outf.write(ix_to_word[word.item()] + ' ')
                     else:
                         outf.write(ix_to_word[word] + ' ')
-                print()
+
             sen_iter_list.append(num_iter_sen)
             outf.write('\n')
-            print()
+
             # Label this pair as 0
             # 4th entry for iteration decay
             # gen_pair.append(num_iter_sen)
-            if count % args.log_interval == 0:
-                print('| Generated {}/{} sentences | ave_time {:5.2f}s'.format(count, args.words, (time.time() - start_time) / count))
-                #sys.exit()
+            if args.print:
+                if count % args.log_interval == 0:
+                    print('| Generated {}/{} sentences | ave_time {:5.2f}s'.format(count, args.words, (time.time() - start_time) / count))
+                    #sys.exit()
             gen_sen_pairs.append(gen_pair)
             dis_panalty_list.append(dis_panalty)
 
