@@ -108,6 +108,8 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
     final_result = 0
     # sys.exit()
     pair = [source, None]
+    best_pair = [source, None]
+    best_result = 0
     rep_count = 0
     for i in range(args.num_iter):
         # Refresh the hidden reward, the current node and the depth of the search
@@ -157,20 +159,35 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
             dis_cache[wordtuple] = copy.deepcopy(result)
             rep_count = 0
         else:
+            pair[1] = torch.LongTensor(wordlist)
             rep_count += 1
             result = dis_cache[wordtuple]
         dis_reward += result
         #print(result)
         #print([ix_to_word[word] for word in wordlist])
+        if result > best_result:
+            best_result = result
+            best_pair[1] = torch.LongTensor(wordlist)
 
         # Early stopping
         if result >= 0.5 or rep_count > 30:
+            best_pair = pair
             print(result)
             for sen in pair:
                 for word in sen:
                     print(ix_to_word[word.item()], end=' ')
                 print()
             final_result = result
+            break
+        
+        # Early stopping with time threshold
+        if i == args.early_stopping:
+            final_result = best_result
+            
+            for sen in best_pair:
+                for word in sen:
+                    print(ix_to_word[word.item()], end=' ')
+                print()
             break
 
         current = root
@@ -192,7 +209,7 @@ def UCTSearch(init_reward, action_space, decoder, encoder_output, init_hidden, d
     # sys.exit()
     if sentence:
         # i: the used #iterations
-        return pair, dis_reward, num_dis, i, final_result
+        return best_pair, dis_reward, num_dis, i, final_result
     else:
         return np.argmax(root.reward), dis_reward, num_dis
 

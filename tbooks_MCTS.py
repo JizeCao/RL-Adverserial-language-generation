@@ -31,7 +31,7 @@ parser.add_argument('--gen_iter', type=int, default=10,
                     help='number of gen_iter')
 parser.add_argument('--warm_words', type=str, default='I have been to somewhere',
                     help='warm-up words list')
-parser.add_argument('--exp_cont', type=float, default=2 / np.sqrt(2),
+parser.add_argument('--exp_cont', type=float, default=3 / np.sqrt(2),
                     help='warm-up words list')
 parser.add_argument('--num_iter', type=int, default=10000000,
                     help='number of iterations done for one MCTS search')
@@ -111,12 +111,14 @@ parser.add_argument('--mix', action='store_true',
                     help='mix generation during training')
 parser.add_argument('--beam_size', type=int, default=8,
                     help='batch size')
-parser.add_argument('--replay', action='store_false',
+parser.add_argument('--replay', action='store_true',
                     help='mix generation during training')
 parser.add_argument('--replay_lag', type=int, default=10,
                     help='the lag between each replay training')
 parser.add_argument('--replay_iter', type=int, default=8,
                     help='number of iterations per replay')
+parser.add_argument('--early_stopping', type=int, default=300,
+                    help='maximum number of iterations for UCT')
 
 
 
